@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Analizzatore Colori Foto</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="container">
+    <h1>Analizzatore Colori Foto</h1>
+    <p class="subtitle">Carica una foto e scopri le percentuali dei colori principali.</p>
+
+    <section class="panel">
+      <label for="imageInput" class="file-label">Scegli immagine</label>
+      <input id="imageInput" type="file" accept="image/*">
+
+      <div class="controls">
+        <label for="colorCount">Numero colori: <span id="colorCountValue">6</span></label>
+        <input id="colorCount" type="range" min="3" max="12" value="6">
+      </div>
+    </section>
+
+    <section class="layout">
+      <div class="preview-wrap panel">
+        <h2>Anteprima</h2>
+        <img id="preview" alt="Anteprima immagine caricata">
+        <canvas id="canvas" hidden></canvas>
+      </div>
+
+      <div class="result-wrap panel">
+        <h2>Percentuali colori</h2>
+        <p id="hint">Carica una foto per iniziare.</p>
+        <div id="results"></div>
+      </div>
+    </section>
+
+    <footer class="author-box" aria-label="autore">
+      Autore: Fausto Buffagni
+    </footer>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>
