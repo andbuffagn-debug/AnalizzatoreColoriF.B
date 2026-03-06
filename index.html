@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Analizzatore colori e Classificatore rocce </title>
+  <title>Analizzatore Colori Foto</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <main class="container">
-    <h1>Analizzatore colori e Classificatore rocce </h1>
-    <p class="subtitle">Consiglio di caricare la foto ritagliata in modo che lo sfondo non influenzi le percentuali</p>
+    <h1>Analizzatore Colori Foto</h1>
+    <p class="subtitle">Carica una foto e scopri le percentuali dei colori principali.</p>
 
     <section class="panel">
       <label for="imageInput" class="file-label">Scegli immagine</label>
@@ -32,101 +32,6 @@
         <h2>Percentuali colori</h2>
         <p id="hint">Carica una foto per iniziare.</p>
         <div id="results"></div>
-      </div>
-    </section>
-
-    <section class="panel triangle-panel">
-      <h2>Combinazione 3 colori (C1, C2, C3)</h2>
-      <p class="subtitle small">
-        Scegli 3 colori trovati nell'immagine. Le percentuali sono portate al 100%.
-      </p>
-
-      <div class="mix-controls">
-        <div class="mix-row">
-          <label for="c1Select">C1</label>
-          <select id="c1Select"></select>
-          <span id="c1Swatch" class="mini-swatch" aria-label="colore c1"></span>
-          <input id="c1Pct" type="number" min="0" max="100" step="0.1" value="33.34" readonly>
-          <span>%</span>
-        </div>
-        <div class="mix-row">
-          <label for="c2Select">C2</label>
-          <select id="c2Select"></select>
-          <span id="c2Swatch" class="mini-swatch" aria-label="colore c2"></span>
-          <input id="c2Pct" type="number" min="0" max="100" step="0.1" value="33.33" readonly>
-          <span>%</span>
-        </div>
-        <div class="mix-row">
-          <label for="c3Select">C3</label>
-          <select id="c3Select"></select>
-          <span id="c3Swatch" class="mini-swatch" aria-label="colore c3"></span>
-          <input id="c3Pct" type="number" min="0" max="100" step="0.1" value="33.33" readonly>
-          <span>%</span>
-        </div>
-      </div>
-
-      <p id="mixTotal" class="mix-total">Totale: 100%</p>
-
-      <div class="charts-row">
-        <svg id="triangleSvg" viewBox="0 0 400 320" role="img" aria-label="Triangolo percentuali colori">
-          <polygon id="baseTriangle" points="200,36 62,276 338,276"></polygon>
-          <line id="lineC1"></line>
-          <line id="lineC2"></line>
-          <line id="lineC3"></line>
-          <text id="labelC1" x="200" y="24" text-anchor="middle">C1</text>
-          <text id="labelC2" x="48" y="292" text-anchor="start">C2</text>
-          <text id="labelC3" x="352" y="292" text-anchor="end">C3</text>
-        </svg>
-
-        <svg id="qapSvg" viewBox="0 0 400 320" role="img" aria-label="Triangolo Streckeisen QAP">
-          <polygon class="st-base" points="200,36 62,276 338,276"></polygon>
-          <line class="st-grid" x1="131" y1="156" x2="269" y2="156"></line>
-          <line class="st-grid" x1="96" y1="216" x2="304" y2="216"></line>
-          <line class="st-grid" x1="131" y1="276" x2="200" y2="156"></line>
-          <line class="st-grid" x1="269" y1="276" x2="200" y2="156"></line>
-          <line class="st-grid" x1="165.5" y1="96" x2="96.5" y2="216"></line>
-          <line class="st-grid" x1="234.5" y1="96" x2="303.5" y2="216"></line>
-          <text class="st-title" x="200" y="18" text-anchor="middle">Streckeisen QAP</text>
-          <text class="st-vertex" x="200" y="34" text-anchor="middle">Q</text>
-          <text class="st-vertex" x="52" y="292" text-anchor="start">A</text>
-          <text class="st-vertex" x="348" y="292" text-anchor="end">P</text>
-          <text class="st-field" x="200" y="118" text-anchor="middle">Alkali-feldspar granite</text>
-          <text class="st-field" x="200" y="138" text-anchor="middle">Granite</text>
-          <text class="st-field" x="145" y="172" text-anchor="middle">Granodiorite</text>
-          <text class="st-field" x="255" y="172" text-anchor="middle">Quartz syenite</text>
-          <text class="st-field" x="200" y="188" text-anchor="middle">Quartz monzonite</text>
-          <text class="st-field" x="124" y="224" text-anchor="middle">Tonalite</text>
-          <text class="st-field" x="272" y="224" text-anchor="middle">Sienite</text>
-          <text class="st-field" x="200" y="236" text-anchor="middle">Monzonite</text>
-          <text class="st-field" x="118" y="258" text-anchor="middle">Diorite</text>
-          <text class="st-field" x="282" y="258" text-anchor="middle">Monzodiorite</text>
-          <circle id="qapPoint" class="st-point" cx="200" cy="196" r="6"></circle>
-        </svg>
-
-        <svg id="fapSvg" viewBox="0 0 400 320" role="img" aria-label="Triangolo Streckeisen FAP">
-          <polygon class="st-base" points="200,36 62,276 338,276"></polygon>
-          <line class="st-grid" x1="131" y1="156" x2="269" y2="156"></line>
-          <line class="st-grid" x1="96" y1="216" x2="304" y2="216"></line>
-          <line class="st-grid" x1="131" y1="276" x2="200" y2="156"></line>
-          <line class="st-grid" x1="269" y1="276" x2="200" y2="156"></line>
-          <line class="st-grid" x1="165.5" y1="96" x2="96.5" y2="216"></line>
-          <line class="st-grid" x1="234.5" y1="96" x2="303.5" y2="216"></line>
-          <text class="st-title" x="200" y="18" text-anchor="middle">Streckeisen FAP</text>
-          <text class="st-vertex" x="200" y="34" text-anchor="middle">F</text>
-          <text class="st-vertex" x="52" y="292" text-anchor="start">A</text>
-          <text class="st-vertex" x="348" y="292" text-anchor="end">P</text>
-          <text class="st-field" x="200" y="118" text-anchor="middle">Foid syenite</text>
-          <text class="st-field" x="200" y="138" text-anchor="middle">Foid monzosyenite</text>
-          <text class="st-field" x="142" y="172" text-anchor="middle">Foid-bearing syenite</text>
-          <text class="st-field" x="258" y="172" text-anchor="middle">Foid monzodiorite</text>
-          <text class="st-field" x="200" y="188" text-anchor="middle">Foid monzonite</text>
-          <text class="st-field" x="126" y="224" text-anchor="middle">Foid gabbro</text>
-          <text class="st-field" x="274" y="224" text-anchor="middle">Foidolite</text>
-          <text class="st-field" x="200" y="236" text-anchor="middle">Monzogabbro</text>
-          <text class="st-field" x="120" y="258" text-anchor="middle">Gabbro</text>
-          <text class="st-field" x="282" y="258" text-anchor="middle">Monzodiorite</text>
-          <circle id="fapPoint" class="st-point" cx="200" cy="196" r="6"></circle>
-        </svg>
       </div>
     </section>
 
