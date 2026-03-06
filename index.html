@@ -9,7 +9,7 @@
 <body>
   <main class="container">
     <h1>Analizzatore Colori Foto</h1>
-    <p class="subtitle">Carica una foto e scopri le percentuali dei colori principali.</p>
+    <p class="subtitle">Carica una foto: il sistema isola automaticamente la roccia e calcola i colori solo su quella.</p>
 
     <section class="panel">
       <label for="imageInput" class="file-label">Scegli immagine</label>
@@ -18,14 +18,20 @@
       <div class="controls">
         <label for="colorCount">Numero colori: <span id="colorCountValue">6</span></label>
         <input id="colorCount" type="range" min="3" max="12" value="6">
+        <div class="selection-tools">
+          <button id="clearSelectionBtn" type="button">Reset selezione</button>
+          <button id="undoPointBtn" type="button">Annulla ultimo punto</button>
+          <button id="closeSelectionBtn" type="button">Conferma area</button>
+          <span id="selectionHint">Clicca/tocca sull'anteprima per creare un poligono. Premi "Conferma area" per chiudere.</span>
+        </div>
       </div>
     </section>
 
     <section class="layout">
       <div class="preview-wrap panel">
         <h2>Anteprima</h2>
-        <img id="preview" alt="Anteprima immagine caricata">
-        <canvas id="canvas" hidden></canvas>
+        <canvas id="previewCanvas" aria-label="Anteprima roccia isolata"></canvas>
+        <canvas id="analysisCanvas" hidden></canvas>
       </div>
 
       <div class="result-wrap panel">

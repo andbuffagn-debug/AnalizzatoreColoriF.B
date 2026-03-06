@@ -51,6 +51,33 @@ h1 {
   margin-top: 12px;
 }
 
+.selection-tools {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.selection-tools button {
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--text);
+  border-radius: 8px;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+#closeSelectionBtn {
+  border-color: #8cb5b0;
+  background: #e8f4f2;
+}
+
+#selectionHint {
+  font-size: 0.9rem;
+  opacity: 0.85;
+}
+
 .layout {
   margin-top: 16px;
   display: grid;
@@ -58,13 +85,13 @@ h1 {
   gap: 16px;
 }
 
-.preview-wrap img {
+.preview-wrap canvas {
   width: 100%;
   max-height: 420px;
-  object-fit: contain;
   border-radius: 12px;
   border: 1px solid var(--border);
   background: #fff;
+  cursor: crosshair;
 }
 
 .result-row {
