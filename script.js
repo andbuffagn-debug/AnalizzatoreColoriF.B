@@ -10,21 +10,9 @@ const undoPointBtn = document.getElementById("undoPointBtn");
 const closeSelectionBtn = document.getElementById("closeSelectionBtn");
 const selectionHint = document.getElementById("selectionHint");
 
-const c1Selects = [
-  document.getElementById("c1Select1"),
-  document.getElementById("c1Select2"),
-  document.getElementById("c1Select3")
-];
-const c2Selects = [
-  document.getElementById("c2Select1"),
-  document.getElementById("c2Select2"),
-  document.getElementById("c2Select3")
-];
-const c3Selects = [
-  document.getElementById("c3Select1"),
-  document.getElementById("c3Select2"),
-  document.getElementById("c3Select3")
-];
+const c1Picker = document.getElementById("c1Picker");
+const c2Picker = document.getElementById("c2Picker");
+const c3Picker = document.getElementById("c3Picker");
 const c1Pct = document.getElementById("c1Pct");
 const c2Pct = document.getElementById("c2Pct");
 const c3Pct = document.getElementById("c3Pct");
@@ -64,6 +52,7 @@ let polygonClosed = false;
 let pointerPx = null;
 let lastTouchMs = 0;
 let currentPalette = [];
+let cSelections = { c1: [], c2: [], c3: [] };
 
 colorCount.addEventListener("input", () => {
   colorCountValue.textContent = colorCount.value;
@@ -75,6 +64,7 @@ clearSelectionBtn.addEventListener("click", () => {
   polygonClosed = false;
   pointerPx = null;
   currentPalette = [];
+  cSelections = { c1: [], c2: [], c3: [] };
   results.innerHTML = "";
   hint.textContent = "Selezione azzerata. Disegna un nuovo poligono.";
   selectionHint.textContent = "Clicca/tocca sull'anteprima per creare un poligono. Premi 'Conferma area' per chiudere.";
@@ -94,13 +84,6 @@ closeSelectionBtn.addEventListener("click", () => {
     polygonClosed = true;
     if (loadedImage) analyzeImage(loadedImage);
   }
-});
-
-[...c1Selects, ...c2Selects, ...c3Selects].forEach((el) => {
-  el.addEventListener("change", () => {
-    updatePercentagesFromSelection();
-    updateTriangle();
-  });
 });
 
 previewCanvas.addEventListener("click", (event) => {
@@ -153,6 +136,7 @@ imageInput.addEventListener("change", (event) => {
       polygonClosed = false;
       pointerPx = null;
       currentPalette = [];
+      cSelections = { c1: [], c2: [], c3: [] };
       renderPreviewOnly();
       populateColorSelectors();
       hint.textContent = "Disegna il poligono sulla roccia e premi 'Conferma area'.";
@@ -211,30 +195,29 @@ function addPolygonPoint(p) {
 function analyzeImage(img) {
   const { width, height, imageData } = drawImageToAnalysisCanvas(img);
   const polygonPx = getPolygonPx(width, height);
+  let activeMask = null;
+  let analysisMode = "foto intera";
 
-  if (!polygonClosed || polygonPx.length < 3) {
-    hint.textContent = "Per analizzare i colori devi chiudere il poligono ('Conferma area').";
-    results.innerHTML = "";
-    currentPalette = [];
-    populateColorSelectors();
-    renderPreviewWithMask(img, width, height, imageData, null, polygonPx);
-    return;
+  if (polygonClosed && polygonPx.length >= 3) {
+    const polygonMask = buildPolygonMask(width, height, polygonPx);
+    const polygonCount = countOnes(polygonMask);
+    if (polygonCount >= 120) {
+      activeMask = polygonMask;
+      analysisMode = "poligono selezionato";
+    }
   }
 
-  const rockMask = buildPolygonMask(width, height, polygonPx);
-  const selectedCount = countOnes(rockMask);
-  if (selectedCount < 30) {
-    hint.textContent = "Area selezionata troppo piccola. Disegna un poligono piu grande.";
-    results.innerHTML = "";
-    currentPalette = [];
-    populateColorSelectors();
-    renderPreviewWithMask(img, width, height, imageData, rockMask, polygonPx);
-    return;
+  if (!activeMask) {
+    activeMask = fullMask(width, height);
+    selectionHint.textContent = "Nessun poligono valido: analisi automatica sull'intera foto.";
+  } else {
+    selectionHint.textContent = "Poligono selezionato attivo. Usa 'Reset selezione' per disegnare una nuova area.";
   }
 
-  renderPreviewWithMask(img, width, height, imageData, rockMask, polygonPx);
+  const selectedCount = countOnes(activeMask);
+  renderPreviewWithMask(img, width, height, imageData, activeMask, polygonPx);
 
-  const points = sampleMaskedColorPoints(imageData.data, width, height, rockMask);
+  const points = sampleMaskedColorPoints(imageData.data, width, height, activeMask);
   if (points.length === 0) {
     hint.textContent = "Nessun colore valido nell'area selezionata.";
     results.innerHTML = "";
@@ -243,15 +226,19 @@ function analyzeImage(img) {
     return;
   }
 
+  const { mainPoints, redTrace } = splitRareRedPoints(points);
+  const pointsForClustering = mainPoints.length > 0 ? mainPoints : points;
   const k = Number(colorCount.value);
-  const { centroids, counts } = weightedKMeans(points, k, 28);
+  const boostedK = Math.min(pointsForClustering.length, Math.max(k + 6, 16));
+  const { centroids, counts } = weightedKMeans(pointsForClustering, boostedK, 36);
 
   let rows = centroids
     .map((rgb, i) => ({ rgb, weight: counts[i] }))
     .filter((x) => x.weight > 0);
 
+  if (redTrace && redTrace.weight > 0) rows.push(redTrace);
+
   rows = mergeSimilarRows(rows);
-  rows = mergeByColorFamily(rows);
   rows = normalizeRowsToPercent(rows);
 
   currentPalette = rows
@@ -263,8 +250,7 @@ function analyzeImage(img) {
     });
 
   const ratioPct = (selectedCount / (width * height)) * 100;
-  hint.textContent = `Analisi poligono selezionato (${ratioPct.toFixed(1)}% immagine). Trovati ${currentPalette.length} colori principali.`;
-  selectionHint.textContent = "Poligono selezionato attivo. Usa 'Reset selezione' per disegnare una nuova area.";
+  hint.textContent = `Analisi ${analysisMode} (${ratioPct.toFixed(1)}% immagine). Trovati ${currentPalette.length} colori principali.`;
 
   renderResults(currentPalette);
   populateColorSelectors();
@@ -345,9 +331,10 @@ function renderPreviewWithMask(img, width, height, imageData, rockMask, polygonP
 
 function sampleMaskedColorPoints(data, width, height, mask) {
   const bins = new Map();
-  const sampleTarget = 120000;
+  const sampleTarget = 900000;
   const totalPixels = width * height;
   const step = Math.max(1, Math.floor(Math.sqrt(totalPixels / sampleTarget)));
+  const stretch = estimateChannelStretch(data, width, height, mask, step);
 
   for (let y = 0; y < height; y += step) {
     for (let x = 0; x < width; x += step) {
@@ -356,14 +343,18 @@ function sampleMaskedColorPoints(data, width, height, mask) {
       const i = idxPixel * 4;
       if (data[i + 3] < 10) continue;
 
-      const rq = data[i] >> 3;
-      const gq = data[i + 1] >> 3;
-      const bq = data[i + 2] >> 3;
-      const key = (rq << 10) | (gq << 5) | bq;
+      const rAdj = stretchChannel(data[i], stretch.rMin, stretch.rMax);
+      const gAdj = stretchChannel(data[i + 1], stretch.gMin, stretch.gMax);
+      const bAdj = stretchChannel(data[i + 2], stretch.bMin, stretch.bMax);
+
+      const rq = rAdj >> 1;
+      const gq = gAdj >> 1;
+      const bq = bAdj >> 1;
+      const key = (rq << 14) | (gq << 7) | bq;
 
       const entry = bins.get(key);
       if (entry) entry.w += 1;
-      else bins.set(key, { rgb: [rq * 8 + 4, gq * 8 + 4, bq * 8 + 4], w: 1 });
+      else bins.set(key, { rgb: [rq * 2 + 1, gq * 2 + 1, bq * 2 + 1], w: 1 });
     }
   }
 
@@ -383,7 +374,8 @@ function mergeSimilarRows(rows) {
         const d = Math.sqrt(colorDistanceSq(work[i].rgb, work[j].rgb));
         const satI = saturation(work[i].rgb);
         const satJ = saturation(work[j].rgb);
-        const threshold = satI < 0.16 && satJ < 0.16 ? 34 : 24;
+        let threshold = satI < 0.16 && satJ < 0.16 ? 12 : 7;
+        if (isRedLikeRgb(work[i].rgb) || isRedLikeRgb(work[j].rgb)) threshold = 8;
         if (d <= threshold && d < bestD) {
           bestD = d;
           bestI = i;
@@ -413,51 +405,85 @@ function mergeSimilarRows(rows) {
   return work;
 }
 
-function mergeByColorFamily(rows) {
-  const grouped = new Map();
+function estimateChannelStretch(data, width, height, mask, step) {
+  let rMin = 255; let gMin = 255; let bMin = 255;
+  let rMax = 0; let gMax = 0; let bMax = 0;
 
-  for (let i = 0; i < rows.length; i += 1) {
-    const row = rows[i];
-    const family = colorFamilyForMerge(row.rgb);
-    const g = grouped.get(family);
-    if (!g) {
-      grouped.set(family, {
-        sumR: row.rgb[0] * row.weight,
-        sumG: row.rgb[1] * row.weight,
-        sumB: row.rgb[2] * row.weight,
-        weight: row.weight
-      });
-    } else {
-      g.sumR += row.rgb[0] * row.weight;
-      g.sumG += row.rgb[1] * row.weight;
-      g.sumB += row.rgb[2] * row.weight;
-      g.weight += row.weight;
+  for (let y = 0; y < height; y += step) {
+    for (let x = 0; x < width; x += step) {
+      const idxPixel = y * width + x;
+      if (mask[idxPixel] !== 1) continue;
+      const i = idxPixel * 4;
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      if (r < rMin) rMin = r;
+      if (g < gMin) gMin = g;
+      if (b < bMin) bMin = b;
+      if (r > rMax) rMax = r;
+      if (g > gMax) gMax = g;
+      if (b > bMax) bMax = b;
     }
   }
 
-  return [...grouped.values()].map((g) => ({
-    rgb: [
-      Math.round(g.sumR / g.weight),
-      Math.round(g.sumG / g.weight),
-      Math.round(g.sumB / g.weight)
-    ],
-    weight: g.weight
-  }));
+  if (rMax - rMin < 60) { rMin = Math.max(0, rMin - 16); rMax = Math.min(255, rMax + 16); }
+  if (gMax - gMin < 60) { gMin = Math.max(0, gMin - 16); gMax = Math.min(255, gMax + 16); }
+  if (bMax - bMin < 60) { bMin = Math.max(0, bMin - 16); bMax = Math.min(255, bMax + 16); }
+
+  return { rMin, rMax, gMin, gMax, bMin, bMax };
 }
 
-function colorFamilyForMerge(rgb) {
+function stretchChannel(v, minV, maxV) {
+  const range = Math.max(1, maxV - minV);
+  const out = ((v - minV) * 255) / range;
+  return Math.max(0, Math.min(255, Math.round(out)));
+}
+
+function splitRareRedPoints(points) {
+  const totalWeight = points.reduce((s, p) => s + p.w, 0);
+  if (totalWeight <= 0) return { mainPoints: points, redTrace: null };
+
+  const redPoints = [];
+  const mainPoints = [];
+  for (let i = 0; i < points.length; i += 1) {
+    if (isRedLikeRgb(points[i].rgb)) redPoints.push(points[i]);
+    else mainPoints.push(points[i]);
+  }
+
+  const redWeight = redPoints.reduce((s, p) => s + p.w, 0);
+  const redRatio = redWeight / totalWeight;
+  if (redWeight === 0 || redRatio < 0.0002 || redRatio > 0.05) {
+    return { mainPoints: points, redTrace: null };
+  }
+
+  let sumR = 0;
+  let sumG = 0;
+  let sumB = 0;
+  for (let i = 0; i < redPoints.length; i += 1) {
+    sumR += redPoints[i].rgb[0] * redPoints[i].w;
+    sumG += redPoints[i].rgb[1] * redPoints[i].w;
+    sumB += redPoints[i].rgb[2] * redPoints[i].w;
+  }
+
+  const redTrace = {
+    rgb: [
+      Math.round(sumR / redWeight),
+      Math.round(sumG / redWeight),
+      Math.round(sumB / redWeight)
+    ],
+    weight: redWeight
+  };
+  return { mainPoints, redTrace };
+}
+
+function isRedLikeRgb(rgb) {
   const [r, g, b] = rgb;
   const max = Math.max(r, g, b);
   const min = Math.min(r, g, b);
-  const light = (max + min) / 2 / 255;
-  const sat = saturation(rgb);
-  const spread = max - min;
-
-  // Mantiene i riflessi bianchi separati, evitando che vengano assorbiti da beige/grigi.
-  if ((light > 0.84 && sat < 0.22) || (light > 0.78 && sat < 0.14 && spread < 30)) return "Bianco";
-  if (light < 0.14 && sat < 0.25) return "Nero";
-
-  return colorNameFromRgb(rgb);
+  const sat = max === 0 ? 0 : (max - min) / max;
+  const warm = r - Math.max(g, b);
+  const darkish = (r + g + b) / 3 < 210;
+  return warm >= 22 && sat >= 0.16 && darkish && r >= 72;
 }
 
 function normalizeRowsToPercent(rows) {
@@ -490,16 +516,14 @@ function populateColorSelectors() {
       { hex: "#2E86AB", name: "Blu medio", pct: 33.33 },
       { hex: "#9F7AEA", name: "Viola medio", pct: 33.33 }
     ];
+  cSelections = sanitizeSelections(cSelections, palette);
+  cSelections.c1 = ensureDefaultSelection(cSelections.c1, palette, [0, 1, 2]);
+  cSelections.c2 = ensureDefaultSelection(cSelections.c2, palette, [1, 2, 3]);
+  cSelections.c3 = ensureDefaultSelection(cSelections.c3, palette, [2, 3, 4]);
 
-  const allGroups = [c1Selects, c2Selects, c3Selects];
-  allGroups.forEach((group) => {
-    const prev = getSelectedHexesFromSlots(group);
-    fillSlotSelects(group, palette, prev);
-  });
-
-  setDefaultGroupSelection(c1Selects, palette, [0, 1, 2]);
-  setDefaultGroupSelection(c2Selects, palette, [1, 2, 3]);
-  setDefaultGroupSelection(c3Selects, palette, [2, 3, 4]);
+  renderPicker(c1Picker, palette, cSelections.c1, "c1");
+  renderPicker(c2Picker, palette, cSelections.c2, "c2");
+  renderPicker(c3Picker, palette, cSelections.c3, "c3");
 
   updatePercentagesFromSelection();
   updateTriangle();
@@ -507,9 +531,9 @@ function populateColorSelectors() {
 
 function updatePercentagesFromSelection() {
   const values = [
-    sumPercentagesForSelection(getSelectedHexesFromSlots(c1Selects)),
-    sumPercentagesForSelection(getSelectedHexesFromSlots(c2Selects)),
-    sumPercentagesForSelection(getSelectedHexesFromSlots(c3Selects))
+    sumPercentagesForSelection(cSelections.c1),
+    sumPercentagesForSelection(cSelections.c2),
+    sumPercentagesForSelection(cSelections.c3)
   ];
   const normalized = normalizeByProportion(values);
   c1Pct.value = normalized[0].toFixed(2);
@@ -527,20 +551,20 @@ function normalizeByProportion(values) {
 }
 
 function updateTriangle() {
-  const c1Hexes = getSelectedHexesFromSlots(c1Selects);
-  const c2Hexes = getSelectedHexesFromSlots(c2Selects);
-  const c3Hexes = getSelectedHexesFromSlots(c3Selects);
+  const c1Hexes = cSelections.c1;
+  const c2Hexes = cSelections.c2;
+  const c3Hexes = cSelections.c3;
 
-  const c1 = representativeColor(c1Hexes) || "#D45D5D";
-  const c2 = representativeColor(c2Hexes) || "#2E86AB";
-  const c3 = representativeColor(c3Hexes) || "#9F7AEA";
+  const c1 = dominantSelectedColor(c1Hexes) || "#D45D5D";
+  const c2 = dominantSelectedColor(c2Hexes) || "#2E86AB";
+  const c3 = dominantSelectedColor(c3Hexes) || "#9F7AEA";
   const p1 = clampNumber(c1Pct.value);
   const p2 = clampNumber(c2Pct.value);
   const p3 = clampNumber(c3Pct.value);
 
-  c1Swatch.style.background = c1;
-  c2Swatch.style.background = c2;
-  c3Swatch.style.background = c3;
+  applySwatchColors(c1Swatch, c1Hexes, c1);
+  applySwatchColors(c2Swatch, c2Hexes, c2);
+  applySwatchColors(c3Swatch, c3Hexes, c3);
 
   mixTotal.textContent = `Totale: ${round2(p1 + p2 + p3).toFixed(2)}%`;
 
@@ -636,6 +660,12 @@ function buildPolygonMask(width, height, polygon) {
     }
   }
 
+  return mask;
+}
+
+function fullMask(width, height) {
+  const mask = new Uint8Array(width * height);
+  mask.fill(1);
   return mask;
 }
 
@@ -852,38 +882,43 @@ function shortNameForHex(hex) {
   return found ? found.name.split(" (")[0] : hex;
 }
 
-function fillSlotSelects(slotSelects, palette, prevValues) {
-  for (let i = 0; i < slotSelects.length; i += 1) {
-    const select = slotSelects[i];
-    const prev = prevValues[i] || "";
-    select.innerHTML =
-      `<option value="">Nessuno</option>${
-        palette.map((p) => `<option value="${p.hex}">${p.name} (${p.hex})</option>`).join("")
-      }`;
-    select.value = palette.some((p) => p.hex === prev) ? prev : "";
-  }
+function sanitizeSelections(selections, palette) {
+  const allowed = new Set(palette.map((p) => p.hex));
+  return {
+    c1: (selections.c1 || []).filter((hex) => allowed.has(hex)),
+    c2: (selections.c2 || []).filter((hex) => allowed.has(hex)),
+    c3: (selections.c3 || []).filter((hex) => allowed.has(hex))
+  };
 }
 
-function setDefaultGroupSelection(slotSelects, palette, fallbackIndices) {
-  if (getSelectedHexesFromSlots(slotSelects).length > 0) return;
-  for (let i = 0; i < slotSelects.length; i += 1) {
+function ensureDefaultSelection(current, palette, fallbackIndices) {
+  if (current.length > 0) return current;
+  const out = [];
+  for (let i = 0; i < fallbackIndices.length; i += 1) {
     const idx = fallbackIndices[i];
-    if (idx !== undefined && idx < palette.length) {
-      slotSelects[i].value = palette[idx].hex;
-    } else {
-      slotSelects[i].value = "";
-    }
+    if (idx < palette.length) out.push(palette[idx].hex);
   }
+  return [...new Set(out)];
 }
 
-function getSelectedHexesFromSlots(slotSelects) {
-  const uniq = [];
-  for (let i = 0; i < slotSelects.length; i += 1) {
-    const hex = slotSelects[i].value;
-    if (!hex || uniq.includes(hex)) continue;
-    uniq.push(hex);
-  }
-  return uniq;
+function renderPicker(container, palette, selectedHexes, groupKey) {
+  const selected = new Set(selectedHexes);
+  container.innerHTML = palette.map((p, i) => `
+    <label class="pick-item">
+      <input type="checkbox" data-group="${groupKey}" value="${p.hex}" ${selected.has(p.hex) ? "checked" : ""}>
+      <span class="pick-swatch" style="background:${p.hex}"></span>
+      <span class="pick-label">${i + 1}. ${p.name} (${p.hex})</span>
+    </label>
+  `).join("");
+
+  container.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
+    cb.addEventListener("change", () => {
+      const values = [...container.querySelectorAll('input[type="checkbox"]:checked')].map((el) => el.value);
+      cSelections[groupKey] = [...new Set(values)];
+      updatePercentagesFromSelection();
+      updateTriangle();
+    });
+  });
 }
 
 function sumPercentagesForSelection(hexes) {
@@ -895,24 +930,30 @@ function sumPercentagesForSelection(hexes) {
   return sum;
 }
 
-function representativeColor(hexes) {
+function dominantSelectedColor(hexes) {
   if (hexes.length === 0) return null;
-  if (hexes.length === 1) return hexes[0];
-
-  let r = 0;
-  let g = 0;
-  let b = 0;
-  let count = 0;
   for (let i = 0; i < hexes.length; i += 1) {
-    const rgb = hexToRgb(hexes[i]);
-    if (!rgb) continue;
-    r += rgb[0];
-    g += rgb[1];
-    b += rgb[2];
-    count += 1;
+    const found = currentPalette.find((p) => p.hex === hexes[i]);
+    if (found) return found.hex;
   }
-  if (count === 0) return null;
-  return toHex([Math.round(r / count), Math.round(g / count), Math.round(b / count)]);
+  return hexes[0];
+}
+
+function applySwatchColors(swatchEl, hexes, fallbackHex) {
+  if (!hexes || hexes.length === 0) {
+    swatchEl.style.background = fallbackHex;
+    return;
+  }
+  if (hexes.length === 1) {
+    swatchEl.style.background = hexes[0];
+    return;
+  }
+  const segments = hexes.map((hex, i) => {
+    const from = (i / hexes.length) * 100;
+    const to = ((i + 1) / hexes.length) * 100;
+    return `${hex} ${from}% ${to}%`;
+  });
+  swatchEl.style.background = `linear-gradient(90deg, ${segments.join(", ")})`;
 }
 
 function shortNamesForHexes(hexes) {

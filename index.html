@@ -15,8 +15,8 @@
       <input id="imageInput" type="file" accept="image/*">
 
       <div class="controls">
-        <label for="colorCount">Numero colori: <span id="colorCountValue">12</span></label>
-        <input id="colorCount" type="range" min="3" max="24" value="12">
+        <label for="colorCount">Numero colori: <span id="colorCountValue">16</span></label>
+        <input id="colorCount" type="range" min="4" max="32" value="16">
 
         <div class="selection-tools">
           <button id="clearSelectionBtn" type="button">Reset selezione</button>
@@ -43,7 +43,7 @@
 
     <section class="panel triangle-panel">
       <h2>STREKEISEN</h2>
-      <p class="subtitle small">Le percentuali sono riportate al  100%.</p>
+      <p class="subtitle small">Le percentuali sono riportate al 100%.</p>
       <p class="subtitle small">Mappatura triangoli: C1 = Q/F , C2 = A , C3 = P </p>
 
       <div class="schema-grid">
@@ -111,34 +111,22 @@
 
       <div class="mix-controls">
         <div class="mix-row">
-          <label for="c1Select1">C1 (Q/F)</label>
-          <div class="slot-selects">
-            <select id="c1Select1"></select>
-            <select id="c1Select2"></select>
-            <select id="c1Select3"></select>
-          </div>
+          <label for="c1Picker">C1 (Q/F)</label>
+          <div id="c1Picker" class="color-picker"></div>
           <span id="c1Swatch" class="mini-swatch" aria-label="colore c1"></span>
           <input id="c1Pct" type="number" readonly>
           <span>%</span>
         </div>
         <div class="mix-row">
-          <label for="c2Select1">C2 (A)</label>
-          <div class="slot-selects">
-            <select id="c2Select1"></select>
-            <select id="c2Select2"></select>
-            <select id="c2Select3"></select>
-          </div>
+          <label for="c2Picker">C2 (A)</label>
+          <div id="c2Picker" class="color-picker"></div>
           <span id="c2Swatch" class="mini-swatch" aria-label="colore c2"></span>
           <input id="c2Pct" type="number" readonly>
           <span>%</span>
         </div>
         <div class="mix-row">
-          <label for="c3Select1">C3 (P)</label>
-          <div class="slot-selects">
-            <select id="c3Select1"></select>
-            <select id="c3Select2"></select>
-            <select id="c3Select3"></select>
-          </div>
+          <label for="c3Picker">C3 (P)</label>
+          <div id="c3Picker" class="color-picker"></div>
           <span id="c3Swatch" class="mini-swatch" aria-label="colore c3"></span>
           <input id="c3Pct" type="number" readonly>
           <span>%</span>

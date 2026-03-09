@@ -163,15 +163,39 @@ h1 { margin: 0 0 8px; }
   background: #fff;
 }
 
-.slot-selects {
+.color-picker {
+  max-height: 156px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  padding: 6px;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px;
+  gap: 4px;
 }
 
-.slot-selects select {
-  min-width: 0;
-  font-size: 0.82rem;
+.pick-item {
+  display: grid;
+  grid-template-columns: 18px 18px 1fr;
+  gap: 8px;
+  align-items: center;
+  font-size: 0.83rem;
+  cursor: pointer;
+}
+
+.pick-item input { margin: 0; }
+
+.pick-swatch {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.25);
+}
+
+.pick-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .mini-swatch {
@@ -289,11 +313,6 @@ h1 { margin: 0 0 8px; }
     grid-template-columns: 30px 1fr 22px 84px 16px;
     gap: 6px;
   }
-  .slot-selects {
-    grid-template-columns: 1fr;
-  }
-  .slot-selects select {
-    font-size: 0.95rem;
-    padding: 8px 10px;
-  }
+  .color-picker { max-height: 180px; }
+  .pick-item { font-size: 0.9rem; }
 }
