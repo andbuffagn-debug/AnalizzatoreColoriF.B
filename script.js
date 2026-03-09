@@ -10,9 +10,21 @@ const undoPointBtn = document.getElementById("undoPointBtn");
 const closeSelectionBtn = document.getElementById("closeSelectionBtn");
 const selectionHint = document.getElementById("selectionHint");
 
-const c1Select = document.getElementById("c1Select");
-const c2Select = document.getElementById("c2Select");
-const c3Select = document.getElementById("c3Select");
+const c1Selects = [
+  document.getElementById("c1Select1"),
+  document.getElementById("c1Select2"),
+  document.getElementById("c1Select3")
+];
+const c2Selects = [
+  document.getElementById("c2Select1"),
+  document.getElementById("c2Select2"),
+  document.getElementById("c2Select3")
+];
+const c3Selects = [
+  document.getElementById("c3Select1"),
+  document.getElementById("c3Select2"),
+  document.getElementById("c3Select3")
+];
 const c1Pct = document.getElementById("c1Pct");
 const c2Pct = document.getElementById("c2Pct");
 const c3Pct = document.getElementById("c3Pct");
@@ -84,9 +96,8 @@ closeSelectionBtn.addEventListener("click", () => {
   }
 });
 
-[c1Select, c2Select, c3Select].forEach((el) => {
+[...c1Selects, ...c2Selects, ...c3Selects].forEach((el) => {
   el.addEventListener("change", () => {
-    ensureDistinctSelections();
     updatePercentagesFromSelection();
     updateTriangle();
   });
@@ -334,7 +345,7 @@ function renderPreviewWithMask(img, width, height, imageData, rockMask, polygonP
 
 function sampleMaskedColorPoints(data, width, height, mask) {
   const bins = new Map();
-  const sampleTarget = 50000;
+  const sampleTarget = 120000;
   const totalPixels = width * height;
   const step = Math.max(1, Math.floor(Math.sqrt(totalPixels / sampleTarget)));
 
@@ -407,7 +418,7 @@ function mergeByColorFamily(rows) {
 
   for (let i = 0; i < rows.length; i += 1) {
     const row = rows[i];
-    const family = colorNameFromRgb(row.rgb);
+    const family = colorFamilyForMerge(row.rgb);
     const g = grouped.get(family);
     if (!g) {
       grouped.set(family, {
@@ -432,6 +443,21 @@ function mergeByColorFamily(rows) {
     ],
     weight: g.weight
   }));
+}
+
+function colorFamilyForMerge(rgb) {
+  const [r, g, b] = rgb;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const light = (max + min) / 2 / 255;
+  const sat = saturation(rgb);
+  const spread = max - min;
+
+  // Mantiene i riflessi bianchi separati, evitando che vengano assorbiti da beige/grigi.
+  if ((light > 0.84 && sat < 0.22) || (light > 0.78 && sat < 0.14 && spread < 30)) return "Bianco";
+  if (light < 0.14 && sat < 0.25) return "Nero";
+
+  return colorNameFromRgb(rgb);
 }
 
 function normalizeRowsToPercent(rows) {
@@ -465,52 +491,26 @@ function populateColorSelectors() {
       { hex: "#9F7AEA", name: "Viola medio", pct: 33.33 }
     ];
 
-  [c1Select, c2Select, c3Select].forEach((select) => {
-    const prev = select.value;
-    select.innerHTML = palette.map((p) => `<option value="${p.hex}">${p.name} (${p.hex})</option>`).join("");
-    if (palette.some((p) => p.hex === prev)) select.value = prev;
+  const allGroups = [c1Selects, c2Selects, c3Selects];
+  allGroups.forEach((group) => {
+    const prev = getSelectedHexesFromSlots(group);
+    fillSlotSelects(group, palette, prev);
   });
 
-  if (palette.length >= 3) {
-    c1Select.value = palette[0].hex;
-    c2Select.value = palette[1].hex;
-    c3Select.value = palette[2].hex;
-  }
+  setDefaultGroupSelection(c1Selects, palette, [0, 1, 2]);
+  setDefaultGroupSelection(c2Selects, palette, [1, 2, 3]);
+  setDefaultGroupSelection(c3Selects, palette, [2, 3, 4]);
 
-  ensureDistinctSelections();
   updatePercentagesFromSelection();
   updateTriangle();
 }
 
-function ensureDistinctSelections() {
-  const values = [...new Set([...c1Select.options].map((o) => o.value))];
-  if (values.length < 3) return;
-
-  const picks = [c1Select.value, c2Select.value, c3Select.value];
-  const used = new Set();
-  for (let i = 0; i < picks.length; i += 1) {
-    if (!used.has(picks[i])) {
-      used.add(picks[i]);
-      continue;
-    }
-    const rep = values.find((v) => !used.has(v));
-    if (rep) {
-      picks[i] = rep;
-      used.add(rep);
-    }
-  }
-
-  c1Select.value = picks[0];
-  c2Select.value = picks[1];
-  c3Select.value = picks[2];
-}
-
 function updatePercentagesFromSelection() {
-  const selected = [c1Select.value, c2Select.value, c3Select.value];
-  const values = selected.map((hex) => {
-    const found = currentPalette.find((p) => p.hex === hex);
-    return found ? found.pct : 0;
-  });
+  const values = [
+    sumPercentagesForSelection(getSelectedHexesFromSlots(c1Selects)),
+    sumPercentagesForSelection(getSelectedHexesFromSlots(c2Selects)),
+    sumPercentagesForSelection(getSelectedHexesFromSlots(c3Selects))
+  ];
   const normalized = normalizeByProportion(values);
   c1Pct.value = normalized[0].toFixed(2);
   c2Pct.value = normalized[1].toFixed(2);
@@ -527,9 +527,13 @@ function normalizeByProportion(values) {
 }
 
 function updateTriangle() {
-  const c1 = c1Select.value || "#D45D5D";
-  const c2 = c2Select.value || "#2E86AB";
-  const c3 = c3Select.value || "#9F7AEA";
+  const c1Hexes = getSelectedHexesFromSlots(c1Selects);
+  const c2Hexes = getSelectedHexesFromSlots(c2Selects);
+  const c3Hexes = getSelectedHexesFromSlots(c3Selects);
+
+  const c1 = representativeColor(c1Hexes) || "#D45D5D";
+  const c2 = representativeColor(c2Hexes) || "#2E86AB";
+  const c3 = representativeColor(c3Hexes) || "#9F7AEA";
   const p1 = clampNumber(c1Pct.value);
   const p2 = clampNumber(c2Pct.value);
   const p3 = clampNumber(c3Pct.value);
@@ -548,10 +552,11 @@ function updateTriangle() {
   drawParallelToOpposite(lineC2, A, B, C, B, p2 / 100, c2);
   drawParallelToOpposite(lineC3, A, C, B, C, p3 / 100, c3);
 
-  labelC1.textContent = `C1 ${p1.toFixed(1)}%`;
-  labelC2.textContent = `C2 ${p2.toFixed(1)}%`;
-  labelC3.textContent = `C3 ${p3.toFixed(1)}%`;
-  triangleLegend.textContent = `C1: ${shortNameForHex(c1)} • C2: ${shortNameForHex(c2)} • C3: ${shortNameForHex(c3)}`;
+  labelC1.textContent = `C1 (Q/F) ${p1.toFixed(1)}%`;
+  labelC2.textContent = `C2 (A) ${p2.toFixed(1)}%`;
+  labelC3.textContent = `C3 (P) ${p3.toFixed(1)}%`;
+  triangleLegend.textContent =
+    `C1→Q/F: ${shortNamesForHexes(c1Hexes)} • C2→A: ${shortNamesForHexes(c2Hexes)} • C3→P: ${shortNamesForHexes(c3Hexes)}`;
 
   updateStreckeisenPoints(p1, p2, p3, A, B, C);
 }
@@ -833,7 +838,8 @@ function buildColorLabel(rgb, hex) {
   }
 
   if (base === "Bianco") {
-    if (sat < 0.09 && light > 0.87) return "Bianco latte";
+    if (sat < 0.11 && light > 0.9) return "Bianco lucido";
+    if (sat < 0.09 && light > 0.84) return "Bianco latte";
     return "Bianco caldo";
   }
 
@@ -844,6 +850,86 @@ function buildColorLabel(rgb, hex) {
 function shortNameForHex(hex) {
   const found = currentPalette.find((p) => p.hex === hex);
   return found ? found.name.split(" (")[0] : hex;
+}
+
+function fillSlotSelects(slotSelects, palette, prevValues) {
+  for (let i = 0; i < slotSelects.length; i += 1) {
+    const select = slotSelects[i];
+    const prev = prevValues[i] || "";
+    select.innerHTML =
+      `<option value="">Nessuno</option>${
+        palette.map((p) => `<option value="${p.hex}">${p.name} (${p.hex})</option>`).join("")
+      }`;
+    select.value = palette.some((p) => p.hex === prev) ? prev : "";
+  }
+}
+
+function setDefaultGroupSelection(slotSelects, palette, fallbackIndices) {
+  if (getSelectedHexesFromSlots(slotSelects).length > 0) return;
+  for (let i = 0; i < slotSelects.length; i += 1) {
+    const idx = fallbackIndices[i];
+    if (idx !== undefined && idx < palette.length) {
+      slotSelects[i].value = palette[idx].hex;
+    } else {
+      slotSelects[i].value = "";
+    }
+  }
+}
+
+function getSelectedHexesFromSlots(slotSelects) {
+  const uniq = [];
+  for (let i = 0; i < slotSelects.length; i += 1) {
+    const hex = slotSelects[i].value;
+    if (!hex || uniq.includes(hex)) continue;
+    uniq.push(hex);
+  }
+  return uniq;
+}
+
+function sumPercentagesForSelection(hexes) {
+  let sum = 0;
+  for (let i = 0; i < hexes.length; i += 1) {
+    const found = currentPalette.find((p) => p.hex === hexes[i]);
+    if (found) sum += found.pct;
+  }
+  return sum;
+}
+
+function representativeColor(hexes) {
+  if (hexes.length === 0) return null;
+  if (hexes.length === 1) return hexes[0];
+
+  let r = 0;
+  let g = 0;
+  let b = 0;
+  let count = 0;
+  for (let i = 0; i < hexes.length; i += 1) {
+    const rgb = hexToRgb(hexes[i]);
+    if (!rgb) continue;
+    r += rgb[0];
+    g += rgb[1];
+    b += rgb[2];
+    count += 1;
+  }
+  if (count === 0) return null;
+  return toHex([Math.round(r / count), Math.round(g / count), Math.round(b / count)]);
+}
+
+function shortNamesForHexes(hexes) {
+  if (!hexes || hexes.length === 0) return "-";
+  const names = hexes.map((h) => shortNameForHex(h));
+  if (names.length <= 2) return names.join(" + ");
+  return `${names[0]} + ${names[1]} + ${names.length - 2} altri`;
+}
+
+function hexToRgb(hex) {
+  const clean = hex.replace("#", "");
+  if (clean.length !== 6) return null;
+  return [
+    parseInt(clean.slice(0, 2), 16),
+    parseInt(clean.slice(2, 4), 16),
+    parseInt(clean.slice(4, 6), 16)
+  ];
 }
 
 function countOnes(mask) {

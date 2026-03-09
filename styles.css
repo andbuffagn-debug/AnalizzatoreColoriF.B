@@ -163,6 +163,17 @@ h1 { margin: 0 0 8px; }
   background: #fff;
 }
 
+.slot-selects {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.slot-selects select {
+  min-width: 0;
+  font-size: 0.82rem;
+}
+
 .mini-swatch {
   width: 18px;
   height: 18px;
@@ -274,4 +285,15 @@ h1 { margin: 0 0 8px; }
   .layout { grid-template-columns: 1fr; }
   .charts-row { grid-template-columns: 1fr; }
   .schema-grid { grid-template-columns: 1fr; }
+  .mix-row {
+    grid-template-columns: 30px 1fr 22px 84px 16px;
+    gap: 6px;
+  }
+  .slot-selects {
+    grid-template-columns: 1fr;
+  }
+  .slot-selects select {
+    font-size: 0.95rem;
+    padding: 8px 10px;
+  }
 }
