@@ -9,7 +9,7 @@
 <body>
   <main class="container">
     <h1>Analizzatore Colori Foto</h1>
-    <p class="subtitle">Carica una foto: il sistema isola automaticamente la roccia e calcola i colori solo su quella.</p>
+    <p class="subtitle">Seleziona manualmente la roccia con un poligono e analizza i colori interni.</p>
 
     <section class="panel">
       <label for="imageInput" class="file-label">Scegli immagine</label>
@@ -18,6 +18,7 @@
       <div class="controls">
         <label for="colorCount">Numero colori: <span id="colorCountValue">6</span></label>
         <input id="colorCount" type="range" min="3" max="12" value="6">
+
         <div class="selection-tools">
           <button id="clearSelectionBtn" type="button">Reset selezione</button>
           <button id="undoPointBtn" type="button">Annulla ultimo punto</button>
@@ -30,15 +31,172 @@
     <section class="layout">
       <div class="preview-wrap panel">
         <h2>Anteprima</h2>
-        <canvas id="previewCanvas" aria-label="Anteprima roccia isolata"></canvas>
+        <canvas id="previewCanvas" aria-label="Anteprima roccia selezionata"></canvas>
         <canvas id="analysisCanvas" hidden></canvas>
       </div>
 
       <div class="result-wrap panel">
         <h2>Percentuali colori</h2>
-        <p id="hint">Carica una foto per iniziare.</p>
+        <p id="hint">Carica una foto e seleziona l'area.</p>
         <div id="results"></div>
       </div>
+    </section>
+
+    <section class="panel triangle-panel">
+      <h2>Combinazione 3 colori (C1, C2, C3)</h2>
+      <p class="subtitle small">Scegli 3 colori rilevati. Le percentuali dei tre colori sono normalizzate a 100%.</p>
+
+      <div class="schema-grid">
+        <div class="schema-card">
+          <h3>Schema QAP</h3>
+          <table class="schema-table">
+            <thead>
+              <tr>
+                <th>Lettera</th>
+                <th>Minerale</th>
+                <th>Colori tipici</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Q</td>
+                <td>Quarzo</td>
+                <td>grigio chiaro, grigio traslucido, bianco vetroso</td>
+              </tr>
+              <tr>
+                <td>A</td>
+                <td>Feldspato potassico</td>
+                <td>rosa, rosa-arancione, rosato, beige rosato</td>
+              </tr>
+              <tr>
+                <td>P</td>
+                <td>Plagioclasio</td>
+                <td>bianco, bianco latte, grigio chiarissimo opaco</td>
+              </tr>
+            </tbody>
+          </table>
+        
+        </div>
+
+        <div class="schema-card">
+          <h3>Schema FAP</h3>
+          <table class="schema-table">
+            <thead>
+              <tr>
+                <th>Lettera</th>
+                <th>Minerale</th>
+                <th>Colori tipici</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>F</td>
+                <td>feldspatoide</td>
+                <td>bianco, grigio chiaro, beige</td>
+              </tr>
+              <tr>
+                <td>A</td>
+                <td>Feldspato potassico</td>
+                <td>rosa, rosa-arancione, rosato</td>
+              </tr>
+              <tr>
+                <td>P</td>
+                <td>Plagioclasio</td>
+                <td>bianco, bianco latte, grigio chiaro oppure opaco</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="mix-controls">
+        <div class="mix-row">
+          <label for="c1Select">C1</label>
+          <select id="c1Select"></select>
+          <span id="c1Swatch" class="mini-swatch" aria-label="colore c1"></span>
+          <input id="c1Pct" type="number" readonly>
+          <span>%</span>
+        </div>
+        <div class="mix-row">
+          <label for="c2Select">C2</label>
+          <select id="c2Select"></select>
+          <span id="c2Swatch" class="mini-swatch" aria-label="colore c2"></span>
+          <input id="c2Pct" type="number" readonly>
+          <span>%</span>
+        </div>
+        <div class="mix-row">
+          <label for="c3Select">C3</label>
+          <select id="c3Select"></select>
+          <span id="c3Swatch" class="mini-swatch" aria-label="colore c3"></span>
+          <input id="c3Pct" type="number" readonly>
+          <span>%</span>
+        </div>
+      </div>
+
+      <p id="mixTotal" class="mix-total">Totale: 100%</p>
+
+      <div class="charts-row">
+        <svg id="triangleSvg" viewBox="0 0 400 320" role="img" aria-label="Triangolo percentuali colori">
+          <polygon id="baseTriangle" points="200,36 62,276 338,276"></polygon>
+          <line id="lineC1"></line>
+          <line id="lineC2"></line>
+          <line id="lineC3"></line>
+          <text id="labelC1" x="200" y="24" text-anchor="middle">C1</text>
+          <text id="labelC2" x="48" y="292" text-anchor="start">C2</text>
+          <text id="labelC3" x="352" y="292" text-anchor="end">C3</text>
+        </svg>
+
+        <svg id="qapSvg" viewBox="0 0 400 320" role="img" aria-label="Triangolo Streckeisen QAP">
+          <polygon class="st-base" points="200,36 62,276 338,276"></polygon>
+          <line class="st-grid" x1="131" y1="156" x2="269" y2="156"></line>
+          <line class="st-grid" x1="96" y1="216" x2="304" y2="216"></line>
+          <line class="st-grid" x1="131" y1="276" x2="200" y2="156"></line>
+          <line class="st-grid" x1="269" y1="276" x2="200" y2="156"></line>
+          <line class="st-grid" x1="165.5" y1="96" x2="96.5" y2="216"></line>
+          <line class="st-grid" x1="234.5" y1="96" x2="303.5" y2="216"></line>
+          <text class="st-title" x="200" y="18" text-anchor="middle">Streckeisen QAP</text>
+          <text class="st-vertex" x="200" y="34" text-anchor="middle">Q</text>
+          <text class="st-vertex" x="52" y="292" text-anchor="start">A</text>
+          <text class="st-vertex" x="348" y="292" text-anchor="end">P</text>
+          <text class="st-field" x="200" y="118" text-anchor="middle">Granito alcalifeldspatico</text>
+          <text class="st-field" x="200" y="136" text-anchor="middle">Granito</text>
+          <text class="st-field" x="146" y="166" text-anchor="middle">Granodiorite</text>
+          <text class="st-field" x="254" y="166" text-anchor="middle">Sienite quarzifera</text>
+          <text class="st-field" x="200" y="184" text-anchor="middle">Monzonite quarzifera</text>
+          <text class="st-field" x="124" y="212" text-anchor="middle">Tonalite</text>
+          <text class="st-field" x="274" y="212" text-anchor="middle">Sienite</text>
+          <text class="st-field" x="200" y="228" text-anchor="middle">Monzonite</text>
+          <text class="st-field" x="118" y="248" text-anchor="middle">Diorite/Gabbro</text>
+          <text class="st-field" x="282" y="248" text-anchor="middle">Monzodiorite</text>
+          <circle id="qapPoint" class="st-point" cx="200" cy="196" r="6"></circle>
+        </svg>
+
+        <svg id="fapSvg" viewBox="0 0 400 320" role="img" aria-label="Triangolo Streckeisen FAP">
+          <polygon class="st-base" points="200,36 62,276 338,276"></polygon>
+          <line class="st-grid" x1="131" y1="156" x2="269" y2="156"></line>
+          <line class="st-grid" x1="96" y1="216" x2="304" y2="216"></line>
+          <line class="st-grid" x1="131" y1="276" x2="200" y2="156"></line>
+          <line class="st-grid" x1="269" y1="276" x2="200" y2="156"></line>
+          <line class="st-grid" x1="165.5" y1="96" x2="96.5" y2="216"></line>
+          <line class="st-grid" x1="234.5" y1="96" x2="303.5" y2="216"></line>
+          <text class="st-title" x="200" y="18" text-anchor="middle">Streckeisen FAP</text>
+          <text class="st-vertex" x="200" y="34" text-anchor="middle">F</text>
+          <text class="st-vertex" x="52" y="292" text-anchor="start">A</text>
+          <text class="st-vertex" x="348" y="292" text-anchor="end">P</text>
+          <text class="st-field" x="200" y="118" text-anchor="middle">Sienite foidica</text>
+          <text class="st-field" x="200" y="136" text-anchor="middle">Monzosienite foidica</text>
+          <text class="st-field" x="142" y="166" text-anchor="middle">Sienite con foidi</text>
+          <text class="st-field" x="258" y="166" text-anchor="middle">Monzodiorite foidica</text>
+          <text class="st-field" x="200" y="184" text-anchor="middle">Monzogabbro foidico</text>
+          <text class="st-field" x="124" y="212" text-anchor="middle">Gabbro foidico</text>
+          <text class="st-field" x="274" y="212" text-anchor="middle">Foidolite</text>
+          <text class="st-field" x="200" y="228" text-anchor="middle">Monzodiorite</text>
+          <text class="st-field" x="118" y="248" text-anchor="middle">Diorite foidica</text>
+          <text class="st-field" x="282" y="248" text-anchor="middle">Monzogabbro</text>
+          <circle id="fapPoint" class="st-point" cx="200" cy="196" r="6"></circle>
+        </svg>
+      </div>
+      <p id="triangleLegend" class="triangle-legend">C1, C2, C3</p>
     </section>
 
     <footer class="author-box" aria-label="autore">

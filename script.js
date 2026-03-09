@@ -10,6 +10,27 @@ const undoPointBtn = document.getElementById("undoPointBtn");
 const closeSelectionBtn = document.getElementById("closeSelectionBtn");
 const selectionHint = document.getElementById("selectionHint");
 
+const c1Select = document.getElementById("c1Select");
+const c2Select = document.getElementById("c2Select");
+const c3Select = document.getElementById("c3Select");
+const c1Pct = document.getElementById("c1Pct");
+const c2Pct = document.getElementById("c2Pct");
+const c3Pct = document.getElementById("c3Pct");
+const c1Swatch = document.getElementById("c1Swatch");
+const c2Swatch = document.getElementById("c2Swatch");
+const c3Swatch = document.getElementById("c3Swatch");
+const mixTotal = document.getElementById("mixTotal");
+
+const lineC1 = document.getElementById("lineC1");
+const lineC2 = document.getElementById("lineC2");
+const lineC3 = document.getElementById("lineC3");
+const labelC1 = document.getElementById("labelC1");
+const labelC2 = document.getElementById("labelC2");
+const labelC3 = document.getElementById("labelC3");
+const qapPoint = document.getElementById("qapPoint");
+const fapPoint = document.getElementById("fapPoint");
+const triangleLegend = document.getElementById("triangleLegend");
+
 const COLOR_LEXICON = [
   { name: "Nero", rgb: [0, 0, 0] },
   { name: "Bianco", rgb: [255, 255, 255] },
@@ -30,6 +51,7 @@ let polygonNorm = [];
 let polygonClosed = false;
 let pointerPx = null;
 let lastTouchMs = 0;
+let currentPalette = [];
 
 colorCount.addEventListener("input", () => {
   colorCountValue.textContent = colorCount.value;
@@ -40,7 +62,12 @@ clearSelectionBtn.addEventListener("click", () => {
   polygonNorm = [];
   polygonClosed = false;
   pointerPx = null;
-  if (loadedImage) analyzeImage(loadedImage);
+  currentPalette = [];
+  results.innerHTML = "";
+  hint.textContent = "Selezione azzerata. Disegna un nuovo poligono.";
+  selectionHint.textContent = "Clicca/tocca sull'anteprima per creare un poligono. Premi 'Conferma area' per chiudere.";
+  renderPreviewOnly();
+  populateColorSelectors();
 });
 
 undoPointBtn.addEventListener("click", () => {
@@ -57,8 +84,16 @@ closeSelectionBtn.addEventListener("click", () => {
   }
 });
 
+[c1Select, c2Select, c3Select].forEach((el) => {
+  el.addEventListener("change", () => {
+    ensureDistinctSelections();
+    updatePercentagesFromSelection();
+    updateTriangle();
+  });
+});
+
 previewCanvas.addEventListener("click", (event) => {
-  if (Date.now() - lastTouchMs < 350) return; // evita doppio inserimento dopo touch
+  if (Date.now() - lastTouchMs < 350) return;
   addPolygonPointFromEvent(event);
 });
 
@@ -71,54 +106,10 @@ previewCanvas.addEventListener("touchend", (event) => {
   addPolygonPointAtClient(touch.clientX, touch.clientY);
 }, { passive: false });
 
-function addPolygonPointFromEvent(event) {
-  if (!loadedImage || previewCanvas.width === 0 || previewCanvas.height === 0) return;
-  const p = pointerToCanvasPx(event, previewCanvas);
-  addPolygonPoint(p);
-}
-
-function addPolygonPointAtClient(clientX, clientY) {
-  const rect = previewCanvas.getBoundingClientRect();
-  const scaleX = previewCanvas.width / Math.max(1, rect.width);
-  const scaleY = previewCanvas.height / Math.max(1, rect.height);
-  const p = {
-    x: Math.max(0, Math.min(previewCanvas.width - 1, (clientX - rect.left) * scaleX)),
-    y: Math.max(0, Math.min(previewCanvas.height - 1, (clientY - rect.top) * scaleY))
-  };
-  addPolygonPoint(p);
-}
-
-function addPolygonPoint(p) {
-  if (polygonClosed) {
-    polygonNorm = [];
-    polygonClosed = false;
-  }
-
-  // Se clicca vicino al primo punto, chiude il poligono.
-  if (polygonNorm.length >= 3) {
-    const first = {
-      x: polygonNorm[0].x * previewCanvas.width,
-      y: polygonNorm[0].y * previewCanvas.height
-    };
-    const d = Math.hypot(p.x - first.x, p.y - first.y);
-    if (d <= 14) {
-      polygonClosed = true;
-      analyzeImage(loadedImage);
-      return;
-    }
-  }
-
-  polygonNorm.push({
-    x: p.x / previewCanvas.width,
-    y: p.y / previewCanvas.height
-  });
-  analyzeImage(loadedImage);
-}
-
 previewCanvas.addEventListener("mousemove", (event) => {
   if (!loadedImage) return;
   pointerPx = pointerToCanvasPx(event, previewCanvas);
-  analyzeImage(loadedImage);
+  renderPreviewOnly();
 });
 
 previewCanvas.addEventListener("dblclick", () => {
@@ -147,14 +138,130 @@ imageInput.addEventListener("change", (event) => {
     const img = new Image();
     img.onload = () => {
       loadedImage = img;
-      analyzeImage(img);
+      polygonNorm = [];
+      polygonClosed = false;
+      pointerPx = null;
+      currentPalette = [];
+      renderPreviewOnly();
+      populateColorSelectors();
+      hint.textContent = "Disegna il poligono sulla roccia e premi 'Conferma area'.";
     };
     img.src = reader.result;
   };
   reader.readAsDataURL(file);
 });
 
+function addPolygonPointFromEvent(event) {
+  if (!loadedImage || previewCanvas.width === 0 || previewCanvas.height === 0) return;
+  const p = pointerToCanvasPx(event, previewCanvas);
+  addPolygonPoint(p);
+}
+
+function addPolygonPointAtClient(clientX, clientY) {
+  const rect = previewCanvas.getBoundingClientRect();
+  const scaleX = previewCanvas.width / Math.max(1, rect.width);
+  const scaleY = previewCanvas.height / Math.max(1, rect.height);
+  const p = {
+    x: Math.max(0, Math.min(previewCanvas.width - 1, (clientX - rect.left) * scaleX)),
+    y: Math.max(0, Math.min(previewCanvas.height - 1, (clientY - rect.top) * scaleY))
+  };
+  addPolygonPoint(p);
+}
+
+function addPolygonPoint(p) {
+  if (!loadedImage) return;
+
+  if (polygonClosed) {
+    polygonNorm = [];
+    polygonClosed = false;
+  }
+
+  if (polygonNorm.length >= 3) {
+    const first = {
+      x: polygonNorm[0].x * previewCanvas.width,
+      y: polygonNorm[0].y * previewCanvas.height
+    };
+    if (Math.hypot(p.x - first.x, p.y - first.y) <= 14) {
+      polygonClosed = true;
+      analyzeImage(loadedImage);
+      return;
+    }
+  }
+
+  polygonNorm.push({
+    x: p.x / previewCanvas.width,
+    y: p.y / previewCanvas.height
+  });
+
+  selectionHint.textContent = "Aggiungi punti e premi 'Conferma area' (o doppio click / Invio).";
+  renderPreviewOnly();
+}
+
 function analyzeImage(img) {
+  const { width, height, imageData } = drawImageToAnalysisCanvas(img);
+  const polygonPx = getPolygonPx(width, height);
+
+  if (!polygonClosed || polygonPx.length < 3) {
+    hint.textContent = "Per analizzare i colori devi chiudere il poligono ('Conferma area').";
+    results.innerHTML = "";
+    currentPalette = [];
+    populateColorSelectors();
+    renderPreviewWithMask(img, width, height, imageData, null, polygonPx);
+    return;
+  }
+
+  const rockMask = buildPolygonMask(width, height, polygonPx);
+  const selectedCount = countOnes(rockMask);
+  if (selectedCount < 30) {
+    hint.textContent = "Area selezionata troppo piccola. Disegna un poligono piu grande.";
+    results.innerHTML = "";
+    currentPalette = [];
+    populateColorSelectors();
+    renderPreviewWithMask(img, width, height, imageData, rockMask, polygonPx);
+    return;
+  }
+
+  renderPreviewWithMask(img, width, height, imageData, rockMask, polygonPx);
+
+  const points = sampleMaskedColorPoints(imageData.data, width, height, rockMask);
+  if (points.length === 0) {
+    hint.textContent = "Nessun colore valido nell'area selezionata.";
+    results.innerHTML = "";
+    currentPalette = [];
+    populateColorSelectors();
+    return;
+  }
+
+  const k = Number(colorCount.value);
+  const { centroids, counts } = weightedKMeans(points, k, 28);
+
+  let rows = centroids
+    .map((rgb, i) => ({ rgb, weight: counts[i] }))
+    .filter((x) => x.weight > 0);
+
+  rows = mergeSimilarRows(rows);
+  rows = mergeByColorFamily(rows);
+  rows = normalizeRowsToPercent(rows);
+
+  currentPalette = rows
+    .sort((a, b) => b.pct - a.pct)
+    .map((r) => {
+      const hex = toHex(r.rgb);
+      const name = buildColorLabel(r.rgb, hex);
+      return { ...r, hex, name };
+    });
+
+  const ratioPct = (selectedCount / (width * height)) * 100;
+  hint.textContent = `Analisi poligono selezionato (${ratioPct.toFixed(1)}% immagine). Trovati ${currentPalette.length} colori principali.`;
+  selectionHint.textContent = "Poligono selezionato attivo. Usa 'Reset selezione' per disegnare una nuova area.";
+
+  renderResults(currentPalette);
+  populateColorSelectors();
+  updatePercentagesFromSelection();
+  updateTriangle();
+}
+
+function drawImageToAnalysisCanvas(img) {
   const ctx = analysisCanvas.getContext("2d", { willReadFrequently: true });
   const maxSide = 900;
   const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
@@ -166,128 +273,42 @@ function analyzeImage(img) {
   ctx.imageSmoothingEnabled = true;
   ctx.drawImage(img, 0, 0, width, height);
 
-  const imageData = ctx.getImageData(0, 0, width, height);
-  const data = imageData.data;
-  const polygonPx = getPolygonPx(width, height);
-  let rockMask;
-  let usedFallbackMask = false;
-  let usedManualSelection = false;
-  let ratio = 0;
-
-  if (polygonClosed && polygonPx.length >= 3) {
-    rockMask = buildPolygonMask(width, height, polygonPx);
-    ratio = countOnes(rockMask) / (width * height);
-    usedManualSelection = true;
-  } else {
-    rockMask = buildRockMask(data, width, height);
-    let rockPixels = countOnes(rockMask);
-    ratio = rockPixels / (width * height);
-
-    // Fallback robusto: se la segmentazione automatica e' troppo piccola o enorme,
-    // usa una maschera centrale per evitare risultati inutilizzabili.
-    if (ratio < 0.08 || ratio > 0.92) {
-      rockMask = buildCenterFallbackMask(width, height);
-      rockPixels = countOnes(rockMask);
-      ratio = rockPixels / (width * height);
-      usedFallbackMask = true;
-    }
-  }
-
-  renderPreviewWithBlur(img, width, height, rockMask, imageData, polygonPx);
-  const bins = new Map();
-
-  const sampleTarget = 50000;
-  const totalPixels = width * height;
-  const step = Math.max(1, Math.floor(Math.sqrt(totalPixels / sampleTarget)));
-
-  for (let y = 0; y < height; y += step) {
-    for (let x = 0; x < width; x += step) {
-      const idxPixel = y * width + x;
-      if (rockMask[idxPixel] !== 1) continue;
-      const i = idxPixel * 4;
-      if (data[i + 3] < 10) continue;
-
-      // Quantizzazione piu fine (5 bit per canale) per migliore fedelta.
-      const rq = data[i] >> 3;
-      const gq = data[i + 1] >> 3;
-      const bq = data[i + 2] >> 3;
-      const key = (rq << 10) | (gq << 5) | bq;
-      const entry = bins.get(key);
-
-      if (entry) {
-        entry.w += 1;
-      } else {
-        bins.set(key, { rgb: [rq * 8 + 4, gq * 8 + 4, bq * 8 + 4], w: 1 });
-      }
-    }
-  }
-
-  const points = [...bins.values()];
-  if (points.length === 0) {
-    hint.textContent = "Roccia non rilevata con affidabilita. Prova una foto piu centrata e nitida.";
-    results.innerHTML = "";
-    return;
-  }
-
-  const ratioPct = ratio * 100;
-
-  const k = Number(colorCount.value);
-  const { centroids, counts } = weightedKMeans(points, k, 30);
-  const total = counts.reduce((sum, v) => sum + v, 0);
-
-  const rows = centroids
-    .map((rgb, i) => ({
-      rgb,
-      count: counts[i],
-      pct: counts[i] > 0 ? (counts[i] / total) * 100 : 0
-    }))
-    .filter((item) => item.count > 0)
-    .sort((a, b) => b.pct - a.pct);
-
-  hint.textContent = usedFallbackMask
-    ? `Analisi roccia (fallback centrale, ${ratioPct.toFixed(1)}% immagine). Trovati ${rows.length} colori principali.`
-    : usedManualSelection
-      ? `Analisi poligono selezionato (${ratioPct.toFixed(1)}% immagine). Trovati ${rows.length} colori principali.`
-      : `Analisi roccia isolata (${ratioPct.toFixed(1)}% dell'immagine). Trovati ${rows.length} colori principali.`;
-  selectionHint.textContent = polygonClosed
-    ? "Poligono selezionato attivo. Usa 'Reset selezione' per tornare all'auto."
-    : polygonNorm.length > 0
-      ? "Aggiungi punti e premi 'Conferma area'. Puoi anche fare doppio click, Invio o click sul primo punto."
-      : "Clicca/tocca sull'anteprima per creare un poligono. Premi 'Conferma area' per chiudere.";
-  renderResults(rows);
+  return { width, height, imageData: ctx.getImageData(0, 0, width, height) };
 }
 
-function renderPreviewWithBlur(img, width, height, rockMask, imageData, polygonPx) {
+function renderPreviewOnly() {
+  if (!loadedImage) return;
+  const { width, height, imageData } = drawImageToAnalysisCanvas(loadedImage);
+  const polygonPx = getPolygonPx(width, height);
+  renderPreviewWithMask(loadedImage, width, height, imageData, null, polygonPx);
+}
+
+function renderPreviewWithMask(img, width, height, imageData, rockMask, polygonPx) {
   previewCanvas.width = width;
   previewCanvas.height = height;
   const pctx = previewCanvas.getContext("2d", { willReadFrequently: true });
 
-  // Sfondo: foto sfocata + velo grigio scuro.
-  pctx.save();
-  pctx.filter = "blur(14px) brightness(0.5) saturate(0.75)";
-  pctx.drawImage(img, 0, 0, width, height);
-  pctx.restore();
-  pctx.fillStyle = "rgba(40, 45, 52, 0.38)";
-  pctx.fillRect(0, 0, width, height);
+  pctx.clearRect(0, 0, width, height);
+  if (rockMask) {
+    pctx.save();
+    pctx.filter = "blur(14px) brightness(0.5) saturate(0.75)";
+    pctx.drawImage(img, 0, 0, width, height);
+    pctx.restore();
+    pctx.fillStyle = "rgba(40, 45, 52, 0.38)";
+    pctx.fillRect(0, 0, width, height);
 
-  // Primo piano: roccia nitida (solo maschera).
-  const fg = new ImageData(
-    new Uint8ClampedArray(imageData.data),
-    imageData.width,
-    imageData.height
-  );
-  for (let i = 0; i < rockMask.length; i += 1) {
-    if (rockMask[i] === 0) {
-      fg.data[i * 4 + 3] = 0;
+    const fg = new ImageData(new Uint8ClampedArray(imageData.data), width, height);
+    for (let i = 0; i < rockMask.length; i += 1) {
+      if (rockMask[i] === 0) fg.data[i * 4 + 3] = 0;
     }
+    const fgCanvas = document.createElement("canvas");
+    fgCanvas.width = width;
+    fgCanvas.height = height;
+    fgCanvas.getContext("2d").putImageData(fg, 0, 0);
+    pctx.drawImage(fgCanvas, 0, 0);
+  } else {
+    pctx.drawImage(img, 0, 0, width, height);
   }
-
-  const fgCanvas = document.createElement("canvas");
-  fgCanvas.width = width;
-  fgCanvas.height = height;
-  const fgCtx = fgCanvas.getContext("2d");
-  fgCtx.putImageData(fg, 0, 0);
-  pctx.drawImage(fgCanvas, 0, 0);
 
   if (polygonPx.length > 0) {
     pctx.save();
@@ -296,14 +317,9 @@ function renderPreviewWithBlur(img, width, height, rockMask, imageData, polygonP
     pctx.setLineDash([8, 5]);
     pctx.beginPath();
     pctx.moveTo(polygonPx[0].x, polygonPx[0].y);
-    for (let i = 1; i < polygonPx.length; i += 1) {
-      pctx.lineTo(polygonPx[i].x, polygonPx[i].y);
-    }
-    if (polygonClosed && polygonPx.length >= 3) {
-      pctx.closePath();
-    } else if (pointerPx) {
-      pctx.lineTo(pointerPx.x, pointerPx.y);
-    }
+    for (let i = 1; i < polygonPx.length; i += 1) pctx.lineTo(polygonPx[i].x, polygonPx[i].y);
+    if (polygonClosed && polygonPx.length >= 3) pctx.closePath();
+    else if (pointerPx) pctx.lineTo(pointerPx.x, pointerPx.y);
     pctx.stroke();
     pctx.setLineDash([]);
     for (let i = 0; i < polygonPx.length; i += 1) {
@@ -316,281 +332,268 @@ function renderPreviewWithBlur(img, width, height, rockMask, imageData, polygonP
   }
 }
 
-function buildRockMask(data, width, height) {
-  const bgCentroids = estimateBackgroundCentroids(data, width, height);
-  const distances = new Float32Array(width * height);
-  const borderDistances = [];
-  const borderBand = Math.max(4, Math.floor(Math.min(width, height) * 0.06));
+function sampleMaskedColorPoints(data, width, height, mask) {
+  const bins = new Map();
+  const sampleTarget = 50000;
+  const totalPixels = width * height;
+  const step = Math.max(1, Math.floor(Math.sqrt(totalPixels / sampleTarget)));
 
-  for (let y = 0; y < height; y += 1) {
-    for (let x = 0; x < width; x += 1) {
-      const idx = y * width + x;
-      const i = idx * 4;
-      const rgb = [data[i], data[i + 1], data[i + 2]];
-      const d = minDistanceToCentroids(rgb, bgCentroids);
-      distances[idx] = d;
+  for (let y = 0; y < height; y += step) {
+    for (let x = 0; x < width; x += step) {
+      const idxPixel = y * width + x;
+      if (mask[idxPixel] !== 1) continue;
+      const i = idxPixel * 4;
+      if (data[i + 3] < 10) continue;
 
-      if (x < borderBand || x >= width - borderBand || y < borderBand || y >= height - borderBand) {
-        borderDistances.push(d);
-      }
+      const rq = data[i] >> 3;
+      const gq = data[i + 1] >> 3;
+      const bq = data[i + 2] >> 3;
+      const key = (rq << 10) | (gq << 5) | bq;
+
+      const entry = bins.get(key);
+      if (entry) entry.w += 1;
+      else bins.set(key, { rgb: [rq * 8 + 4, gq * 8 + 4, bq * 8 + 4], w: 1 });
     }
   }
 
-  const p92 = percentile(borderDistances, 92);
-  const otsu = otsuThresholdFromDistances(distances);
-  const thresholds = [
-    Math.max(700, p92 * 1.05),
-    Math.max(850, p92 * 1.2),
-    Math.max(1000, p92 * 1.35),
-    Math.max(1100, otsu)
-  ];
-
-  let bestMask = new Uint8Array(width * height);
-  let bestScore = -1;
-
-  for (let t = 0; t < thresholds.length; t += 1) {
-    const threshold = thresholds[t];
-    let mask = new Uint8Array(width * height);
-    for (let i = 0; i < mask.length; i += 1) {
-      if (distances[i] > threshold) mask[i] = 1;
-    }
-
-    mask = closeMask(mask, width, height);
-    mask = openMask(mask, width, height);
-    mask = selectBestComponent(mask, width, height);
-
-    const areaRatio = countOnes(mask) / Math.max(1, width * height);
-    const centerScore = computeMaskCenterScore(mask, width, height);
-    const areaScore = 1 - Math.min(1, Math.abs(areaRatio - 0.28) / 0.28);
-    const score = centerScore * 1.3 + areaScore;
-
-    if (score > bestScore) {
-      bestScore = score;
-      bestMask = mask;
-    }
-  }
-
-  return dilate(bestMask, width, height);
+  return [...bins.values()];
 }
 
-function estimateBackgroundCentroids(data, width, height) {
-  const borderBand = Math.max(4, Math.floor(Math.min(width, height) * 0.06));
-  const histogram = new Map();
+function mergeSimilarRows(rows) {
+  const work = rows.map((r) => ({ rgb: [...r.rgb], weight: r.weight }));
 
-  for (let y = 0; y < height; y += 1) {
-    for (let x = 0; x < width; x += 1) {
-      if (!(x < borderBand || x >= width - borderBand || y < borderBand || y >= height - borderBand)) {
-        continue;
-      }
-      const i = (y * width + x) * 4;
-      const rq = data[i] >> 4;
-      const gq = data[i + 1] >> 4;
-      const bq = data[i + 2] >> 4;
-      const key = (rq << 8) | (gq << 4) | bq;
-      histogram.set(key, (histogram.get(key) || 0) + 1);
-    }
-  }
+  while (true) {
+    let bestI = -1;
+    let bestJ = -1;
+    let bestD = Number.POSITIVE_INFINITY;
 
-  const topBins = [...histogram.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 6)
-    .map(([key]) => {
-      const rq = (key >> 8) & 0x0f;
-      const gq = (key >> 4) & 0x0f;
-      const bq = key & 0x0f;
-      return [rq * 16 + 8, gq * 16 + 8, bq * 16 + 8];
-    });
-
-  if (topBins.length > 0) return topBins;
-
-  return [[255, 255, 255], [0, 0, 0]];
-}
-
-function minDistanceToCentroids(rgb, centroids) {
-  let min = Number.POSITIVE_INFINITY;
-  for (let i = 0; i < centroids.length; i += 1) {
-    const d = colorDistanceSq(rgb, centroids[i]);
-    if (d < min) min = d;
-  }
-  return min;
-}
-
-function percentile(values, p) {
-  if (values.length === 0) return 0;
-  const sorted = [...values].sort((a, b) => a - b);
-  const idx = Math.min(sorted.length - 1, Math.max(0, Math.floor((p / 100) * (sorted.length - 1))));
-  return sorted[idx];
-}
-
-function otsuThresholdFromDistances(distances) {
-  const bins = 256;
-  const hist = new Array(bins).fill(0);
-  let maxV = 1;
-
-  for (let i = 0; i < distances.length; i += 1) {
-    if (distances[i] > maxV) maxV = distances[i];
-  }
-
-  for (let i = 0; i < distances.length; i += 1) {
-    const b = Math.min(bins - 1, Math.floor((distances[i] / maxV) * (bins - 1)));
-    hist[b] += 1;
-  }
-
-  const total = distances.length;
-  let sum = 0;
-  for (let i = 0; i < bins; i += 1) sum += i * hist[i];
-
-  let sumB = 0;
-  let wB = 0;
-  let maxBetween = -1;
-  let thresholdBin = 0;
-
-  for (let i = 0; i < bins; i += 1) {
-    wB += hist[i];
-    if (wB === 0) continue;
-    const wF = total - wB;
-    if (wF === 0) break;
-    sumB += i * hist[i];
-    const mB = sumB / wB;
-    const mF = (sum - sumB) / wF;
-    const between = wB * wF * (mB - mF) * (mB - mF);
-    if (between > maxBetween) {
-      maxBetween = between;
-      thresholdBin = i;
-    }
-  }
-
-  return (thresholdBin / (bins - 1)) * maxV;
-}
-
-function openMask(mask, width, height) {
-  return dilate(erode(mask, width, height), width, height);
-}
-
-function closeMask(mask, width, height) {
-  return erode(dilate(mask, width, height), width, height);
-}
-
-function erode(mask, width, height) {
-  const out = new Uint8Array(mask.length);
-  for (let y = 1; y < height - 1; y += 1) {
-    for (let x = 1; x < width - 1; x += 1) {
-      const idx = y * width + x;
-      let keep = 1;
-      for (let yy = -1; yy <= 1; yy += 1) {
-        for (let xx = -1; xx <= 1; xx += 1) {
-          if (mask[idx + yy * width + xx] === 0) {
-            keep = 0;
-            yy = 2;
-            break;
-          }
+    for (let i = 0; i < work.length; i += 1) {
+      for (let j = i + 1; j < work.length; j += 1) {
+        const d = Math.sqrt(colorDistanceSq(work[i].rgb, work[j].rgb));
+        const satI = saturation(work[i].rgb);
+        const satJ = saturation(work[j].rgb);
+        const threshold = satI < 0.16 && satJ < 0.16 ? 34 : 24;
+        if (d <= threshold && d < bestD) {
+          bestD = d;
+          bestI = i;
+          bestJ = j;
         }
       }
-      out[idx] = keep;
     }
+
+    if (bestI === -1) break;
+
+    const a = work[bestI];
+    const b = work[bestJ];
+    const tw = a.weight + b.weight;
+    const merged = {
+      rgb: [
+        Math.round((a.rgb[0] * a.weight + b.rgb[0] * b.weight) / tw),
+        Math.round((a.rgb[1] * a.weight + b.rgb[1] * b.weight) / tw),
+        Math.round((a.rgb[2] * a.weight + b.rgb[2] * b.weight) / tw)
+      ],
+      weight: tw
+    };
+
+    work[bestI] = merged;
+    work.splice(bestJ, 1);
   }
-  return out;
+
+  return work;
 }
 
-function dilate(mask, width, height) {
-  const out = new Uint8Array(mask.length);
-  for (let y = 1; y < height - 1; y += 1) {
-    for (let x = 1; x < width - 1; x += 1) {
-      const idx = y * width + x;
-      let on = 0;
-      for (let yy = -1; yy <= 1; yy += 1) {
-        for (let xx = -1; xx <= 1; xx += 1) {
-          if (mask[idx + yy * width + xx] === 1) {
-            on = 1;
-            yy = 2;
-            break;
-          }
-        }
-      }
-      out[idx] = on;
-    }
-  }
-  return out;
-}
+function mergeByColorFamily(rows) {
+  const grouped = new Map();
 
-function selectBestComponent(mask, width, height) {
-  const visited = new Uint8Array(mask.length);
-  const queue = new Int32Array(mask.length);
-  const out = new Uint8Array(mask.length);
-  const cx = width / 2;
-  const cy = height / 2;
-  const maxDist = Math.hypot(cx, cy) || 1;
-  let bestScore = -1;
-
-  for (let start = 0; start < mask.length; start += 1) {
-    if (mask[start] !== 1 || visited[start] === 1) continue;
-    let qh = 0;
-    let qt = 0;
-    queue[qt] = start;
-    qt += 1;
-    visited[start] = 1;
-
-    const comp = [];
-    let size = 0;
-    let sumX = 0;
-    let sumY = 0;
-    let touchesBorder = false;
-
-    while (qh < qt) {
-      const idx = queue[qh];
-      qh += 1;
-      comp.push(idx);
-      size += 1;
-      const x = idx % width;
-      const y = (idx - x) / width;
-      sumX += x;
-      sumY += y;
-      if (x === 0 || y === 0 || x === width - 1 || y === height - 1) touchesBorder = true;
-
-      const neigh = [idx - 1, idx + 1, idx - width, idx + width];
-      for (let n = 0; n < 4; n += 1) {
-        const ni = neigh[n];
-        if (ni < 0 || ni >= mask.length) continue;
-        const nx = ni % width;
-        if ((n === 0 && nx > x) || (n === 1 && nx < x)) continue;
-        if (mask[ni] !== 1 || visited[ni] === 1) continue;
-        visited[ni] = 1;
-        queue[qt] = ni;
-        qt += 1;
-      }
-    }
-
-    const mx = sumX / Math.max(1, size);
-    const my = sumY / Math.max(1, size);
-    const centerBonus = 1 + (1 - Math.min(1, Math.hypot(mx - cx, my - cy) / maxDist));
-    const borderPenalty = touchesBorder ? 0.2 : 1;
-    const score = size * centerBonus * borderPenalty;
-
-    if (score > bestScore) {
-      bestScore = score;
-      out.fill(0);
-      for (let i = 0; i < comp.length; i += 1) out[comp[i]] = 1;
+  for (let i = 0; i < rows.length; i += 1) {
+    const row = rows[i];
+    const family = colorNameFromRgb(row.rgb);
+    const g = grouped.get(family);
+    if (!g) {
+      grouped.set(family, {
+        sumR: row.rgb[0] * row.weight,
+        sumG: row.rgb[1] * row.weight,
+        sumB: row.rgb[2] * row.weight,
+        weight: row.weight
+      });
+    } else {
+      g.sumR += row.rgb[0] * row.weight;
+      g.sumG += row.rgb[1] * row.weight;
+      g.sumB += row.rgb[2] * row.weight;
+      g.weight += row.weight;
     }
   }
 
+  return [...grouped.values()].map((g) => ({
+    rgb: [
+      Math.round(g.sumR / g.weight),
+      Math.round(g.sumG / g.weight),
+      Math.round(g.sumB / g.weight)
+    ],
+    weight: g.weight
+  }));
+}
+
+function normalizeRowsToPercent(rows) {
+  const total = rows.reduce((s, r) => s + r.weight, 0);
+  if (total <= 0) return [];
+  const out = rows.map((r) => ({ ...r, pct: (r.weight / total) * 100 }));
+  out.sort((a, b) => b.pct - a.pct);
   return out;
 }
 
-function countOnes(mask) {
-  let n = 0;
-  for (let i = 0; i < mask.length; i += 1) n += mask[i];
-  return n;
+function renderResults(rows) {
+  results.innerHTML = rows
+    .map((row) => {
+      const rgbText = `RGB(${row.rgb[0]}, ${row.rgb[1]}, ${row.rgb[2]})`;
+      return `
+      <div class="result-row">
+        <div class="swatch" style="background:${row.hex}"></div>
+        <div class="hex">${row.name} • ${row.hex} • ${rgbText}</div>
+        <div class="percent">${row.pct.toFixed(2)}%</div>
+      </div>`;
+    })
+    .join("");
+}
+
+function populateColorSelectors() {
+  const palette = currentPalette.length > 0
+    ? currentPalette
+    : [
+      { hex: "#D45D5D", name: "Rosso medio", pct: 33.34 },
+      { hex: "#2E86AB", name: "Blu medio", pct: 33.33 },
+      { hex: "#9F7AEA", name: "Viola medio", pct: 33.33 }
+    ];
+
+  [c1Select, c2Select, c3Select].forEach((select) => {
+    const prev = select.value;
+    select.innerHTML = palette.map((p) => `<option value="${p.hex}">${p.name} (${p.hex})</option>`).join("");
+    if (palette.some((p) => p.hex === prev)) select.value = prev;
+  });
+
+  if (palette.length >= 3) {
+    c1Select.value = palette[0].hex;
+    c2Select.value = palette[1].hex;
+    c3Select.value = palette[2].hex;
+  }
+
+  ensureDistinctSelections();
+  updatePercentagesFromSelection();
+  updateTriangle();
+}
+
+function ensureDistinctSelections() {
+  const values = [...new Set([...c1Select.options].map((o) => o.value))];
+  if (values.length < 3) return;
+
+  const picks = [c1Select.value, c2Select.value, c3Select.value];
+  const used = new Set();
+  for (let i = 0; i < picks.length; i += 1) {
+    if (!used.has(picks[i])) {
+      used.add(picks[i]);
+      continue;
+    }
+    const rep = values.find((v) => !used.has(v));
+    if (rep) {
+      picks[i] = rep;
+      used.add(rep);
+    }
+  }
+
+  c1Select.value = picks[0];
+  c2Select.value = picks[1];
+  c3Select.value = picks[2];
+}
+
+function updatePercentagesFromSelection() {
+  const selected = [c1Select.value, c2Select.value, c3Select.value];
+  const values = selected.map((hex) => {
+    const found = currentPalette.find((p) => p.hex === hex);
+    return found ? found.pct : 0;
+  });
+  const normalized = normalizeByProportion(values);
+  c1Pct.value = normalized[0].toFixed(2);
+  c2Pct.value = normalized[1].toFixed(2);
+  c3Pct.value = normalized[2].toFixed(2);
+}
+
+function normalizeByProportion(values) {
+  const sum = values[0] + values[1] + values[2];
+  if (sum <= 0) return [33.34, 33.33, 33.33];
+  const out = values.map((v) => round2((v / sum) * 100));
+  const fix = round2(100 - (out[0] + out[1] + out[2]));
+  out[2] = round2(out[2] + fix);
+  return out;
+}
+
+function updateTriangle() {
+  const c1 = c1Select.value || "#D45D5D";
+  const c2 = c2Select.value || "#2E86AB";
+  const c3 = c3Select.value || "#9F7AEA";
+  const p1 = clampNumber(c1Pct.value);
+  const p2 = clampNumber(c2Pct.value);
+  const p3 = clampNumber(c3Pct.value);
+
+  c1Swatch.style.background = c1;
+  c2Swatch.style.background = c2;
+  c3Swatch.style.background = c3;
+
+  mixTotal.textContent = `Totale: ${round2(p1 + p2 + p3).toFixed(2)}%`;
+
+  const A = { x: 200, y: 36 };
+  const B = { x: 62, y: 276 };
+  const C = { x: 338, y: 276 };
+
+  drawParallelToOpposite(lineC1, B, A, C, A, p1 / 100, c1);
+  drawParallelToOpposite(lineC2, A, B, C, B, p2 / 100, c2);
+  drawParallelToOpposite(lineC3, A, C, B, C, p3 / 100, c3);
+
+  labelC1.textContent = `C1 ${p1.toFixed(1)}%`;
+  labelC2.textContent = `C2 ${p2.toFixed(1)}%`;
+  labelC3.textContent = `C3 ${p3.toFixed(1)}%`;
+  triangleLegend.textContent = `C1: ${shortNameForHex(c1)} • C2: ${shortNameForHex(c2)} • C3: ${shortNameForHex(c3)}`;
+
+  updateStreckeisenPoints(p1, p2, p3, A, B, C);
+}
+
+function updateStreckeisenPoints(p1, p2, p3, vTop, vLeft, vRight) {
+  const sum = p1 + p2 + p3;
+  if (sum <= 0) return;
+  const wTop = p1 / sum;
+  const wLeft = p2 / sum;
+  const wRight = p3 / sum;
+
+  const x = vTop.x * wTop + vLeft.x * wLeft + vRight.x * wRight;
+  const y = vTop.y * wTop + vLeft.y * wLeft + vRight.y * wRight;
+
+  qapPoint.setAttribute("cx", x.toFixed(2));
+  qapPoint.setAttribute("cy", y.toFixed(2));
+  fapPoint.setAttribute("cx", x.toFixed(2));
+  fapPoint.setAttribute("cy", y.toFixed(2));
+}
+
+function drawParallelToOpposite(lineEl, from1, vertex, from2, vertexRef, t, color) {
+  const u = Math.max(0, Math.min(1, t));
+  const pStart = lerpPoint(from1, vertex, u);
+  const pEnd = lerpPoint(from2, vertexRef, u);
+  lineEl.setAttribute("x1", pStart.x.toFixed(2));
+  lineEl.setAttribute("y1", pStart.y.toFixed(2));
+  lineEl.setAttribute("x2", pEnd.x.toFixed(2));
+  lineEl.setAttribute("y2", pEnd.y.toFixed(2));
+  lineEl.setAttribute("stroke", color);
+}
+
+function lerpPoint(a, b, t) {
+  return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
 }
 
 function pointerToCanvasPx(event, canvasEl) {
   const rect = canvasEl.getBoundingClientRect();
   const scaleX = canvasEl.width / Math.max(1, rect.width);
   const scaleY = canvasEl.height / Math.max(1, rect.height);
-  const x = (event.clientX - rect.left) * scaleX;
-  const y = (event.clientY - rect.top) * scaleY;
   return {
-    x: Math.max(0, Math.min(canvasEl.width - 1, x)),
-    y: Math.max(0, Math.min(canvasEl.height - 1, y))
+    x: Math.max(0, Math.min(canvasEl.width - 1, (event.clientX - rect.left) * scaleX)),
+    y: Math.max(0, Math.min(canvasEl.height - 1, (event.clientY - rect.top) * scaleY))
   };
 }
 
@@ -624,9 +627,7 @@ function buildPolygonMask(width, height, polygon) {
 
   for (let y = y1; y <= y2; y += 1) {
     for (let x = x1; x <= x2; x += 1) {
-      if (pointInPolygon(x + 0.5, y + 0.5, polygon)) {
-        mask[y * width + x] = 1;
-      }
+      if (pointInPolygon(x + 0.5, y + 0.5, polygon)) mask[y * width + x] = 1;
     }
   }
 
@@ -647,49 +648,6 @@ function pointInPolygon(x, y, polygon) {
   return inside;
 }
 
-function computeMaskCenterScore(mask, width, height) {
-  let sumX = 0;
-  let sumY = 0;
-  let cnt = 0;
-  for (let i = 0; i < mask.length; i += 1) {
-    if (mask[i] !== 1) continue;
-    const x = i % width;
-    const y = (i - x) / width;
-    sumX += x;
-    sumY += y;
-    cnt += 1;
-  }
-  if (cnt === 0) return 0;
-  const cx = width / 2;
-  const cy = height / 2;
-  const mx = sumX / cnt;
-  const my = sumY / cnt;
-  const d = Math.hypot(mx - cx, my - cy);
-  const maxD = Math.hypot(cx, cy) || 1;
-  return 1 - Math.min(1, d / maxD);
-}
-
-function buildCenterFallbackMask(width, height) {
-  const mask = new Uint8Array(width * height);
-  const cx = width / 2;
-  const cy = height / 2;
-  const rx = width * 0.28;
-  const ry = height * 0.42;
-
-  for (let y = 0; y < height; y += 1) {
-    for (let x = 0; x < width; x += 1) {
-      const nx = (x - cx) / rx;
-      const ny = (y - cy) / ry;
-      if ((nx * nx) + (ny * ny) <= 1.0) {
-        mask[y * width + x] = 1;
-      }
-    }
-  }
-
-  // Leggera dilatazione per coprire bene l'oggetto centrale.
-  return dilate(mask, width, height);
-}
-
 function weightedKMeans(points, requestedK, maxIterations) {
   const k = Math.min(requestedK, points.length);
   if (k === 0) return { centroids: [], counts: [] };
@@ -699,7 +657,7 @@ function weightedKMeans(points, requestedK, maxIterations) {
 
   for (let iter = 0; iter < maxIterations; iter += 1) {
     const sums = new Array(k).fill(0).map(() => [0, 0, 0]);
-    const distanceFromCentroid = new Array(points.length).fill(0);
+    const distFrom = new Array(points.length).fill(0);
     counts.fill(0);
 
     for (let i = 0; i < points.length; i += 1) {
@@ -715,7 +673,7 @@ function weightedKMeans(points, requestedK, maxIterations) {
         }
       }
 
-      distanceFromCentroid[i] = bestDist;
+      distFrom[i] = bestDist;
       counts[best] += p.w;
       sums[best][0] += p.rgb[0] * p.w;
       sums[best][1] += p.rgb[1] * p.w;
@@ -725,8 +683,8 @@ function weightedKMeans(points, requestedK, maxIterations) {
     let moved = false;
     for (let c = 0; c < k; c += 1) {
       if (counts[c] === 0) {
-        const replacementIndex = farthestPointIndex(points, distanceFromCentroid);
-        centroids[c] = [...points[replacementIndex].rgb];
+        const idx = farthestPointIndex(points, distFrom);
+        centroids[c] = [...points[idx].rgb];
         moved = true;
         continue;
       }
@@ -734,12 +692,8 @@ function weightedKMeans(points, requestedK, maxIterations) {
       const nr = Math.round(sums[c][0] / counts[c]);
       const ng = Math.round(sums[c][1] / counts[c]);
       const nb = Math.round(sums[c][2] / counts[c]);
-
       if (nr !== centroids[c][0] || ng !== centroids[c][1] || nb !== centroids[c][2]) moved = true;
-
-      centroids[c][0] = nr;
-      centroids[c][1] = ng;
-      centroids[c][2] = nb;
+      centroids[c] = [nr, ng, nb];
     }
 
     if (!moved) break;
@@ -750,33 +704,26 @@ function weightedKMeans(points, requestedK, maxIterations) {
 
 function initCentroids(points, k) {
   const centroids = [];
-  let mostFrequent = 0;
-
-  for (let i = 1; i < points.length; i += 1) {
-    if (points[i].w > points[mostFrequent].w) mostFrequent = i;
-  }
-  centroids.push([...points[mostFrequent].rgb]);
+  let most = 0;
+  for (let i = 1; i < points.length; i += 1) if (points[i].w > points[most].w) most = i;
+  centroids.push([...points[most].rgb]);
 
   while (centroids.length < k) {
-    let bestIndex = 0;
+    let bestIdx = 0;
     let bestScore = -1;
-
     for (let i = 0; i < points.length; i += 1) {
-      const p = points[i];
       let minDist = Number.POSITIVE_INFINITY;
-
       for (let c = 0; c < centroids.length; c += 1) {
-        const d = colorDistanceSq(p.rgb, centroids[c]);
+        const d = colorDistanceSq(points[i].rgb, centroids[c]);
         if (d < minDist) minDist = d;
       }
-
-      const score = minDist * p.w;
+      const score = minDist * points[i].w;
       if (score > bestScore) {
         bestScore = score;
-        bestIndex = i;
+        bestIdx = i;
       }
     }
-    centroids.push([...points[bestIndex].rgb]);
+    centroids.push([...points[bestIdx].rgb]);
   }
 
   return centroids;
@@ -785,7 +732,6 @@ function initCentroids(points, k) {
 function farthestPointIndex(points, distances) {
   let bestIndex = 0;
   let bestScore = -1;
-
   for (let i = 0; i < points.length; i += 1) {
     const score = distances[i] * points[i].w;
     if (score > bestScore) {
@@ -807,6 +753,12 @@ function toHex(rgb) {
   return `#${rgb.map((v) => v.toString(16).padStart(2, "0")).join("")}`.toUpperCase();
 }
 
+function saturation(rgb) {
+  const max = Math.max(rgb[0], rgb[1], rgb[2]);
+  const min = Math.min(rgb[0], rgb[1], rgb[2]);
+  return max === 0 ? 0 : (max - min) / max;
+}
+
 function colorNameFromRgb(rgb) {
   let bestName = "Colore";
   let bestDist = Number.POSITIVE_INFINITY;
@@ -825,17 +777,15 @@ function colorDescriptor(rgb) {
   const max = Math.max(r, g, b);
   const min = Math.min(r, g, b);
   const delta = max - min;
-  const lightness = (max + min) / 2 / 255;
-  const saturation = max === 0 ? 0 : delta / max;
+  const light = (max + min) / 2 / 255;
+  const sat = max === 0 ? 0 : delta / max;
 
   let tone = "medio";
-  if (lightness < 0.26) tone = "scuro";
-  else if (lightness > 0.78) tone = "chiaro";
+  if (light < 0.25) tone = "scuro";
+  else if (light > 0.78) tone = "chiaro";
 
   let flavor = "";
-  if (saturation < 0.16) {
-    flavor = "";
-  } else {
+  if (sat >= 0.16) {
     const warm = r - b;
     const greenish = g - ((r + b) / 2);
     if (warm > 24) flavor = " caldo";
@@ -843,28 +793,73 @@ function colorDescriptor(rgb) {
     else if (greenish > 22) flavor = " oliva";
   }
 
-  return `${tone}${flavor}`;
+  return `${tone}${flavor}`.trim();
 }
 
-function renderResults(rows) {
-  const usedLabels = new Map();
-  results.innerHTML = rows
-    .map((row) => {
-      const hex = toHex(row.rgb);
-      const rgbText = `RGB(${row.rgb[0]}, ${row.rgb[1]}, ${row.rgb[2]})`;
-      const base = colorNameFromRgb(row.rgb);
-      const desc = colorDescriptor(row.rgb);
-      const rawLabel = `${base} ${desc}`.trim();
-      const seen = (usedLabels.get(rawLabel) || 0) + 1;
-      usedLabels.set(rawLabel, seen);
-      const hexTag = hex.slice(1, 5);
-      const name = seen > 1 ? `${rawLabel} (${hexTag})` : rawLabel;
-      return `
-      <div class="result-row">
-        <div class="swatch" style="background:${hex}"></div>
-        <div class="hex">${name} • ${hex} • ${rgbText}</div>
-        <div class="percent">${row.pct.toFixed(2)}%</div>
-      </div>`;
-    })
-    .join("");
+function buildColorLabel(rgb, hex) {
+  const base = colorNameFromRgb(rgb);
+  const [r, g, b] = rgb;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const light = (max + min) / 2 / 255;
+  const sat = saturation(rgb);
+
+  if (base === "Grigio") {
+    if (light < 0.22) return "Grigio antracite";
+    if (light < 0.35) return "Grigio ardesia";
+    if (light < 0.5) return "Grigio pietra";
+    if (light < 0.68) return "Grigio cenere";
+    if (light < 0.82) return "Grigio perla";
+    return "Grigio ghiaccio";
+  }
+
+  if (base === "Beige") {
+    if (light > 0.78) return "Avorio";
+    if (sat < 0.18) return "Tortora";
+    if (r > g + 8) return "Beige sabbia";
+    return "Beige crema";
+  }
+
+  if (base === "Marrone") {
+    if (light < 0.28) return "Marrone bruno";
+    if (sat > 0.35) return "Marrone ruggine";
+    return "Marrone castagna";
+  }
+
+  if (base === "Verde") {
+    if (sat < 0.2) return "Verde salvia";
+    if (light < 0.35) return "Verde bosco";
+    return "Verde oliva";
+  }
+
+  if (base === "Bianco") {
+    if (sat < 0.09 && light > 0.87) return "Bianco latte";
+    return "Bianco caldo";
+  }
+
+  const desc = colorDescriptor(rgb);
+  return `${base} ${desc}`.trim();
 }
+
+function shortNameForHex(hex) {
+  const found = currentPalette.find((p) => p.hex === hex);
+  return found ? found.name.split(" (")[0] : hex;
+}
+
+function countOnes(mask) {
+  let n = 0;
+  for (let i = 0; i < mask.length; i += 1) n += mask[i];
+  return n;
+}
+
+function clampNumber(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(0, Math.min(100, n));
+}
+
+function round2(n) {
+  return Math.round(n * 100) / 100;
+}
+
+populateColorSelectors();
