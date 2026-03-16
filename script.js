@@ -217,8 +217,8 @@ function analyzeImage(img) {
   const selectedCount = countOnes(activeMask);
   renderPreviewWithMask(img, width, height, imageData, activeMask, polygonPx);
 
-  const points = sampleMaskedColorPoints(imageData.data, width, height, activeMask);
-  if (points.length === 0) {
+  const { points, highlightTrace } = sampleMaskedColorPoints(imageData.data, width, height, activeMask);
+  if (points.length === 0 && !highlightTrace) {
     hint.textContent = "Nessun colore valido nell'area selezionata.";
     results.innerHTML = "";
     currentPalette = [];
@@ -226,8 +226,12 @@ function analyzeImage(img) {
     return;
   }
 
-  const { mainPoints, redTrace } = splitRareRedPoints(points);
-  const pointsForClustering = mainPoints.length > 0 ? mainPoints : points;
+  let pointsForSplit = points.length > 0 ? points : [];
+  const { mainPoints: noRedPoints, redTrace } = splitRareRedPoints(pointsForSplit);
+  pointsForSplit = noRedPoints.length > 0 ? noRedPoints : pointsForSplit;
+  const { mainPoints: noWhitePoints, whiteTrace } = splitRareWhitePoints(pointsForSplit);
+  pointsForSplit = noWhitePoints.length > 0 ? noWhitePoints : pointsForSplit;
+  const pointsForClustering = pointsForSplit;
   const k = Number(colorCount.value);
   const boostedK = Math.min(pointsForClustering.length, Math.max(k + 6, 16));
   const { centroids, counts } = weightedKMeans(pointsForClustering, boostedK, 36);
@@ -236,9 +240,10 @@ function analyzeImage(img) {
     .map((rgb, i) => ({ rgb, weight: counts[i] }))
     .filter((x) => x.weight > 0);
 
-  if (redTrace && redTrace.weight > 0) rows.push(redTrace);
-
   rows = mergeSimilarRows(rows);
+  if (redTrace && redTrace.weight > 0) rows.push(redTrace);
+  if (whiteTrace && whiteTrace.weight > 0) rows.push(whiteTrace);
+  if (highlightTrace && highlightTrace.weight > 0) rows.push(highlightTrace);
   rows = normalizeRowsToPercent(rows);
 
   currentPalette = rows
@@ -331,10 +336,14 @@ function renderPreviewWithMask(img, width, height, imageData, rockMask, polygonP
 
 function sampleMaskedColorPoints(data, width, height, mask) {
   const bins = new Map();
-  const sampleTarget = 900000;
+  const sampleTarget = 1200000;
   const totalPixels = width * height;
   const step = Math.max(1, Math.floor(Math.sqrt(totalPixels / sampleTarget)));
   const stretch = estimateChannelStretch(data, width, height, mask, step);
+  let highlightWeight = 0;
+  let highlightR = 0;
+  let highlightG = 0;
+  let highlightB = 0;
 
   for (let y = 0; y < height; y += step) {
     for (let x = 0; x < width; x += step) {
@@ -342,6 +351,14 @@ function sampleMaskedColorPoints(data, width, height, mask) {
       if (mask[idxPixel] !== 1) continue;
       const i = idxPixel * 4;
       if (data[i + 3] < 10) continue;
+
+      if (isHighlightPixel(data[i], data[i + 1], data[i + 2])) {
+        highlightWeight += 1;
+        highlightR += data[i];
+        highlightG += data[i + 1];
+        highlightB += data[i + 2];
+        continue;
+      }
 
       const rAdj = stretchChannel(data[i], stretch.rMin, stretch.rMax);
       const gAdj = stretchChannel(data[i + 1], stretch.gMin, stretch.gMax);
@@ -358,7 +375,18 @@ function sampleMaskedColorPoints(data, width, height, mask) {
     }
   }
 
-  return [...bins.values()];
+  const highlightTrace = highlightWeight > 0
+    ? {
+      rgb: [
+        Math.round(highlightR / highlightWeight),
+        Math.round(highlightG / highlightWeight),
+        Math.round(highlightB / highlightWeight)
+      ],
+      weight: highlightWeight
+    }
+    : null;
+
+  return { points: [...bins.values()], highlightTrace };
 }
 
 function mergeSimilarRows(rows) {
@@ -374,7 +402,14 @@ function mergeSimilarRows(rows) {
         const d = Math.sqrt(colorDistanceSq(work[i].rgb, work[j].rgb));
         const satI = saturation(work[i].rgb);
         const satJ = saturation(work[j].rgb);
+        const whiteI = isWhiteLikeRgb(work[i].rgb);
+        const whiteJ = isWhiteLikeRgb(work[j].rgb);
+        const brightI = isBrightWhiteRgb(work[i].rgb);
+        const brightJ = isBrightWhiteRgb(work[j].rgb);
+        if (whiteI !== whiteJ) continue;
+        if (brightI !== brightJ) continue;
         let threshold = satI < 0.16 && satJ < 0.16 ? 12 : 7;
+        if (whiteI && whiteJ) threshold = brightI && brightJ ? 7 : 9;
         if (isRedLikeRgb(work[i].rgb) || isRedLikeRgb(work[j].rgb)) threshold = 8;
         if (d <= threshold && d < bestD) {
           bestD = d;
@@ -484,6 +519,69 @@ function isRedLikeRgb(rgb) {
   const warm = r - Math.max(g, b);
   const darkish = (r + g + b) / 3 < 210;
   return warm >= 22 && sat >= 0.16 && darkish && r >= 72;
+}
+
+function splitRareWhitePoints(points) {
+  const totalWeight = points.reduce((s, p) => s + p.w, 0);
+  if (totalWeight <= 0) return { mainPoints: points, whiteTrace: null };
+
+  const whitePoints = [];
+  const mainPoints = [];
+  for (let i = 0; i < points.length; i += 1) {
+    if (isWhiteLikeRgb(points[i].rgb)) whitePoints.push(points[i]);
+    else mainPoints.push(points[i]);
+  }
+
+  const whiteWeight = whitePoints.reduce((s, p) => s + p.w, 0);
+  const whiteRatio = whiteWeight / totalWeight;
+  if (whiteWeight === 0 || whiteRatio < 0.0002 || whiteRatio > 0.45) {
+    return { mainPoints: points, whiteTrace: null };
+  }
+
+  let sumR = 0;
+  let sumG = 0;
+  let sumB = 0;
+  for (let i = 0; i < whitePoints.length; i += 1) {
+    sumR += whitePoints[i].rgb[0] * whitePoints[i].w;
+    sumG += whitePoints[i].rgb[1] * whitePoints[i].w;
+    sumB += whitePoints[i].rgb[2] * whitePoints[i].w;
+  }
+
+  const whiteTrace = {
+    rgb: [
+      Math.round(sumR / whiteWeight),
+      Math.round(sumG / whiteWeight),
+      Math.round(sumB / whiteWeight)
+    ],
+    weight: whiteWeight
+  };
+  return { mainPoints, whiteTrace };
+}
+
+function isWhiteLikeRgb(rgb) {
+  const [r, g, b] = rgb;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const light = (max + min) / 2 / 255;
+  const sat = saturation(rgb);
+  return light > 0.80 && sat < 0.2;
+}
+
+function isBrightWhiteRgb(rgb) {
+  const [r, g, b] = rgb;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const light = (max + min) / 2 / 255;
+  const sat = saturation(rgb);
+  return light > 0.9 && sat < 0.12;
+}
+
+function isHighlightPixel(r, g, b) {
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const light = (max + min) / 2 / 255;
+  const sat = max === 0 ? 0 : (max - min) / max;
+  return max > 225 && light > 0.88 && sat < 0.12;
 }
 
 function normalizeRowsToPercent(rows) {
@@ -832,12 +930,17 @@ function colorDescriptor(rgb) {
 }
 
 function buildColorLabel(rgb, hex) {
-  const base = colorNameFromRgb(rgb);
+  let base = colorNameFromRgb(rgb);
   const [r, g, b] = rgb;
   const max = Math.max(r, g, b);
   const min = Math.min(r, g, b);
+  const spread = max - min;
   const light = (max + min) / 2 / 255;
   const sat = saturation(rgb);
+
+  const whiteKind = classifyWhiteKind(rgb);
+  if (whiteKind) return whiteKind;
+  if (light > 0.74 && sat < 0.24 && spread < 80) base = "Bianco";
 
   if (base === "Grigio") {
     if (light < 0.22) return "Grigio antracite";
@@ -868,13 +971,30 @@ function buildColorLabel(rgb, hex) {
   }
 
   if (base === "Bianco") {
-    if (sat < 0.11 && light > 0.9) return "Bianco lucido";
-    if (sat < 0.09 && light > 0.84) return "Bianco latte";
+    if (light > 0.97 && sat < 0.06 && spread < 12) return "Bianco trasparente";
+    if (light > 0.92 && sat < 0.09) return "Bianco lucido";
+    if (light > 0.86 && sat < 0.13 && spread < 32) return "Bianco traslucido";
+    if (light > 0.82 && sat < 0.15) return "Bianco latte";
     return "Bianco caldo";
   }
 
   const desc = colorDescriptor(rgb);
   return `${base} ${desc}`.trim();
+}
+
+function classifyWhiteKind(rgb) {
+  const [r, g, b] = rgb;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const spread = max - min;
+  const light = (max + min) / 2 / 255;
+  const sat = max === 0 ? 0 : (max - min) / max;
+
+  if (light > 0.98 && sat < 0.05 && spread < 12) return "Bianco trasparente";
+  if (light > 0.94 && sat < 0.08) return "Bianco lucido";
+  if (light > 0.88 && sat < 0.12 && spread < 36) return "Bianco traslucido";
+  if (light > 0.83 && sat < 0.15) return "Bianco latte";
+  return null;
 }
 
 function shortNameForHex(hex) {
